@@ -19,6 +19,7 @@ from typing import Dict, Any, List, Tuple
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from dataset import generative_model
+from dataset.multi_dataset import MultiDatasetManager
 from utils.model_checkpoint import create_checkpoint_manager
 
 # Import all available models
@@ -229,13 +230,13 @@ def setup_training_data(n_samples: int = 256, n_points: int = 100, batch_size: i
     return train_loader, example_batch, signals
 
 
-def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001):
+def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, dataset_name: str = 'ou_process'):
     """Train all available models and save checkpoints."""
-    print("Training Available Models with Checkpointing")
+    print(f"Training Available Models with Checkpointing on {dataset_name.upper()}")
     print("=" * 60)
     
-    # Setup checkpoint manager
-    checkpoint_manager = create_checkpoint_manager()
+    # Setup checkpoint manager for specific dataset
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
     trainer = ModelTrainer(checkpoint_manager)
     
     # Check existing models
@@ -405,27 +406,310 @@ def force_retrain_model(model_id: str, num_epochs: int = 100):
     train_available_models(num_epochs)
 
 
+def train_all_datasets(epochs: int = 30, lr: float = 0.001):
+    """Train all models on all datasets."""
+    print("🚀 Multi-Dataset Training Pipeline")
+    print("=" * 70)
+    
+    # Initialize dataset manager
+    dataset_manager = MultiDatasetManager()
+    
+    # Get all datasets
+    datasets = {
+        'ou_process': None,  # Use existing OU data generation
+        'heston': dataset_manager.get_dataset('heston', num_samples=256),
+        'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=256),
+        'brownian': dataset_manager.get_dataset('brownian', num_samples=256)
+    }
+    
+    print(f"Training on {len(datasets)} datasets:")
+    for dataset_name in datasets.keys():
+        print(f"   📊 {dataset_name.upper()}")
+    
+    for dataset_name, dataset_data in datasets.items():
+        print(f"\n{'='*70}")
+        print(f"TRAINING ON {dataset_name.upper()} DATASET")
+        print(f"{'='*70}")
+        
+        if dataset_name == 'ou_process':
+            # Use existing OU training function
+            train_available_models(epochs, lr, dataset_name='ou_process')
+        else:
+            # Train on new dataset
+            train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr)
+
+
+def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 30, lr: float = 0.001):
+    """Train all available models on a specific dataset."""
+    print(f"Training Available Models on {dataset_name.upper()} Dataset")
+    print("=" * 60)
+    
+    # Setup training data
+    if dataset_data is not None:
+        train_data = torch.stack([dataset_data[i][0] for i in range(min(256, len(dataset_data)))])
+        test_data = torch.stack([dataset_data[i][0] for i in range(min(64, len(dataset_data)))])
+    else:
+        # Fallback to OU process
+        dataset = generative_model.get_signal(num_samples=256)
+        train_data = torch.stack([dataset[i][0] for i in range(256)])
+        test_data = torch.stack([dataset[i][0] for i in range(64)])
+    
+    print(f"Training: {train_data.shape[0]} samples, batch size varies by model")
+    print(f"Test data: {test_data.shape}")
+    
+    # Setup checkpoint manager for this dataset
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
+    
+    # Check which models need training
+    models_to_train = []
+    
+    # Check all available models
+    model_configs = [
+        ("A1", create_a1_final_model, "CannedNet + T-Statistic", A1_AVAILABLE),
+        ("A2", create_a2_model, "CannedNet + Signature Scoring", A2_AVAILABLE),
+        ("A3", create_a3_model, "CannedNet + MMD", A3_AVAILABLE),
+        ("A4", create_a4_model, "CannedNet + T-Statistic + Log Signatures", A4_AVAILABLE),
+        ("B1", create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved", B1_AVAILABLE),
+        ("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved", B2_AVAILABLE),
+        ("B3", create_b3_model, "Neural SDE + T-Statistic", B3_AVAILABLE),
+        ("B4", create_b4_model, "Neural SDE + MMD", B4_AVAILABLE),
+        ("B5", create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE)
+    ]
+    
+    for model_id, create_fn, description, available in model_configs:
+        if available:
+            if checkpoint_manager.model_exists(model_id):
+                print(f"⏭️ {model_id} already trained on {dataset_name}, skipping...")
+            else:
+                models_to_train.append((model_id, create_fn, description))
+    
+    if not models_to_train:
+        print(f"\n✅ All available models already trained on {dataset_name}!")
+        return True
+    
+    print(f"\nModels to train on {dataset_name}: {len(models_to_train)}")
+    for model_id, _, description in models_to_train:
+        print(f"  {model_id}: {description}")
+    
+    # Train each model
+    training_results = []
+    
+    for model_id, create_model_fn, description in models_to_train:
+        print(f"\n{'='*60}")
+        print(f"Training {model_id} ({description}) on {dataset_name}")
+        print(f"{'='*60}")
+        
+        try:
+            # Create model
+            model = create_model_fn(train_data, train_data)
+            print(f"Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
+            
+            # Use memory-optimized training for sigkernel models
+            if model_id in ['B1', 'B2']:
+                success, best_loss, best_epoch = train_model_memory_optimized(
+                    model, model_id, checkpoint_manager, train_data, epochs
+                )
+            else:
+                success, best_loss, best_epoch = train_model_standard(
+                    model, model_id, checkpoint_manager, train_data, epochs, lr
+                )
+            
+            if success:
+                training_results.append({
+                    'dataset': dataset_name,
+                    'model_id': model_id,
+                    'best_loss': best_loss,
+                    'best_epoch': best_epoch,
+                    'total_epochs': epochs
+                })
+                print(f"✅ {model_id} training completed on {dataset_name}")
+            else:
+                print(f"❌ {model_id} training failed on {dataset_name}")
+                
+        except Exception as e:
+            print(f"❌ Training failed for {model_id} on {dataset_name}: {e}")
+            continue
+    
+    # Save training summary for this dataset
+    if training_results:
+        summary_df = pd.DataFrame(training_results)
+        summary_dir = f'results/{dataset_name}/training'
+        os.makedirs(summary_dir, exist_ok=True)
+        summary_path = os.path.join(summary_dir, f'{dataset_name}_training_summary.csv')
+        summary_df.to_csv(summary_path, index=False)
+        print(f"\nTraining summary saved to: {summary_path}")
+    
+    # Final status
+    print(f"\nFinal Checkpoint Status for {dataset_name}:")
+    checkpoint_manager.print_available_models()
+    
+    return True
+
+
+def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train_data: torch.Tensor, epochs: int):
+    """Memory-optimized training for B1, B2 models with sigkernel."""
+    print(f"Training {model_id} with memory optimization...")
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    model.train()
+    
+    best_loss = float('inf')
+    best_epoch = 0
+    
+    # Very small batch training for memory efficiency
+    mini_batch_size = 4
+    accumulation_steps = 8
+    
+    for epoch in range(epochs):
+        epoch_start = time.time()
+        epoch_loss = 0.0
+        num_batches = 0
+        
+        # Shuffle data
+        indices = torch.randperm(train_data.shape[0])
+        
+        # Process in mini-batches with gradient accumulation
+        optimizer.zero_grad()
+        accumulated_loss = 0.0
+        
+        for step in range(0, len(indices), mini_batch_size):
+            batch_indices = indices[step:step + mini_batch_size]
+            if len(batch_indices) == 0:
+                continue
+            
+            batch_data = train_data[batch_indices]
+            
+            # Forward pass
+            generated_output = model(batch_data)
+            loss = model.compute_loss(generated_output)
+            
+            # Scale loss for gradient accumulation
+            scaled_loss = loss / accumulation_steps
+            scaled_loss.backward()
+            
+            accumulated_loss += loss.item()
+            num_batches += 1
+            
+            # Update weights every accumulation_steps
+            if (step // mini_batch_size + 1) % accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+                
+                # Clear memory
+                del generated_output, loss, scaled_loss
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+        
+        # Final optimizer step if needed
+        if num_batches % accumulation_steps != 0:
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        # Calculate epoch loss
+        if num_batches > 0:
+            epoch_loss = accumulated_loss / num_batches
+        
+        # Save best model
+        if epoch_loss < best_loss:
+            best_loss = epoch_loss
+            best_epoch = epoch + 1
+            
+            checkpoint_manager.save_model(
+                model=model,
+                model_id=model_id,
+                epoch=epoch + 1,
+                loss=epoch_loss,
+                metrics={}
+            )
+        
+        if (epoch + 1) % 5 == 0 or epoch == 0:
+            epoch_time = time.time() - epoch_start
+            print(f"  Epoch {epoch + 1:2d}: Loss = {epoch_loss:.6f}, Best = {best_loss:.6f} (epoch {best_epoch}), Time = {epoch_time:.2f}s")
+    
+    return True, best_loss, best_epoch
+
+
+def train_model_standard(model, model_id: str, checkpoint_manager, train_data: torch.Tensor, epochs: int, lr: float):
+    """Standard training for regular models."""
+    trainer = ModelTrainer(model, checkpoint_manager, model_id)
+    
+    try:
+        history = trainer.train_with_checkpointing(
+            train_data, epochs=epochs, lr=lr, batch_size=32 if model_id.startswith('A') else 16
+        )
+        
+        best_loss = min(history['losses'])
+        best_epoch = history['losses'].index(best_loss) + 1
+        
+        return True, best_loss, best_epoch
+        
+    except Exception as e:
+        print(f"❌ Training failed: {e}")
+        return False, float('inf'), 0
+
+
 def main():
-    """Main training function."""
+    """Main training function with multi-dataset support."""
     import argparse
     
     parser = argparse.ArgumentParser(description="Train and save signature-based models")
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--force", type=str, help="Force retrain specific model (A1, A2, A3)")
+    parser.add_argument("--force", type=str, help="Force retrain specific model")
+    parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
     
     args = parser.parse_args()
     
     if args.list:
-        checkpoint_manager = create_checkpoint_manager()
-        checkpoint_manager.print_available_models()
+        # List models for all datasets
+        datasets = ['ou_process', 'heston', 'rbergomi', 'brownian']
+        for dataset_name in datasets:
+            if os.path.exists(f'results/{dataset_name}'):
+                print(f"\n{dataset_name.upper()} Dataset:")
+                checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
+                checkpoint_manager.print_available_models()
         return
     
     if args.force:
-        force_retrain_model(args.force, args.epochs)
+        # Force retrain on specific dataset or all datasets
+        if args.dataset:
+            force_retrain_model_on_dataset(args.force, args.dataset, args.epochs)
+        else:
+            force_retrain_model(args.force, args.epochs)
+    elif args.dataset:
+        # Train on specific dataset
+        if args.dataset == 'ou_process':
+            train_available_models(args.epochs, args.lr)
+        else:
+            dataset_manager = MultiDatasetManager()
+            dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=256)
+            train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr)
     else:
-        train_available_models(args.epochs, args.lr)
+        # Train on all datasets (default behavior)
+        train_all_datasets(args.epochs, args.lr)
+
+
+def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int):
+    """Force retrain a model on a specific dataset."""
+    print(f"Force Retraining {model_id} on {dataset_name}")
+    print("=" * 50)
+    
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
+    
+    if checkpoint_manager.model_exists(model_id):
+        print(f"Deleting existing checkpoint for {model_id} on {dataset_name}...")
+        checkpoint_manager.delete_model(model_id)
+    
+    # Train on specific dataset
+    if dataset_name == 'ou_process':
+        train_available_models(epochs, dataset_name='ou_process')
+    else:
+        dataset_manager = MultiDatasetManager()
+        dataset_data = dataset_manager.get_dataset(dataset_name, num_samples=256)
+        train_available_models_on_dataset(dataset_name, dataset_data, epochs)
 
 
 if __name__ == "__main__":

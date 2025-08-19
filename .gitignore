@@ -1,4 +1,7 @@
-results/trained_models/
+results/ou_process/trained_models/
+results/brownian/trained_models/
+results/heston/trained_models/
+results/rbergomi/trained_models/
 notebooks/
 data/
 signatures/__pycache__/

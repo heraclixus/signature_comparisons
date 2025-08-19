@@ -231,20 +231,32 @@ trained_model = checkpoint_manager.load_model('B3')  # or B4, A2, etc.
 samples = trained_model.generate_samples(100)
 ```
 
-### 📈 **Step 7: Custom Analysis**
+### 📈 **Step 7: Multi-Dataset Analysis**
+
+```bash
+# Evaluate models on multiple stochastic processes
+python src/experiments/multi_dataset_evaluation.py
+
+# Results organized by dataset:
+# - results/ou_process/     (Ornstein-Uhlenbeck - original)
+# - results/heston/         (Heston stochastic volatility)
+# - results/rbergomi/       (Rough Bergomi volatility)
+# - results/brownian/       (Standard Brownian motion)
+```
+
+### 🔬 **Step 8: Custom Analysis**
 
 ```python
 # Custom evaluation of specific models
-from experiments.evaluation_metrics import compute_evaluation_metrics
+from dataset.multi_dataset import MultiDatasetManager
 
-# Generate samples from two models for comparison
+# Test model on different datasets
+dataset_manager = MultiDatasetManager()
+heston_data = dataset_manager.get_dataset('heston', num_samples=64)
+
+# Evaluate champion model on Heston data
 b3_samples = b3_model.generate_samples(64)
-b4_samples = b4_model.generate_samples(64)
-
-# Compare against ground truth
-ground_truth = get_signal(64)
-b3_metrics = compute_evaluation_metrics(b3_samples, ground_truth)
-b4_metrics = compute_evaluation_metrics(b4_samples, ground_truth)
+# Compare performance across process types
 ```
 
 ## 📁 Repository Structure
@@ -287,18 +299,28 @@ signature_comparisons/
 4. **✅ Truncated Signatures Optimal**: Outperform advanced PDE-solved and log signature methods
 5. **✅ Cross-Method Success**: B3 (Neural SDE + T-Statistic) achieved unprecedented performance
 
-### **🏆 Definitive Recommendations:**
+### **🏆 Process-Specific Recommendations:**
 
-#### **For Practitioners:**
-- **Primary Choice**: B3 (Neural SDE + T-Statistic + Truncated) - Ultimate champion
-- **Alternative**: B4 (Neural SDE + MMD + Truncated) - Excellent runner-up
-- **CannedNet Baseline**: A2 (CannedNet + Signature Scoring + Truncated) - Good discrete approach
+#### **For Mean-Reverting Processes (OU-like):**
+- **Primary**: B3 (Neural SDE + T-Statistic) - KS 0.096 ⭐⭐⭐
+- **Alternative**: B4 (Neural SDE + MMD) - KS 0.123 ⭐⭐
+
+#### **For Financial/Volatility Models (Heston, rBergomi):**
+- **Primary**: A2 (CannedNet + Signature Scoring) - Most robust
+- **Insight**: Neural SDE struggles with stochastic volatility (KS 0.86-0.96)
+
+#### **For Simple Diffusion (Brownian Motion):**
+- **Primary**: A2 (CannedNet + Signature Scoring) - KS 0.118 ⭐⭐⭐
+- **Alternative**: B4 (Neural SDE + MMD) - KS 0.130 ⭐⭐
+
+#### **For Unknown Process Types:**
+- **Safe Choice**: A2 (CannedNet + Signature Scoring) - Most robust across datasets
+- **Specialized**: B3 (Neural SDE + T-Statistic) - Best for mean-reverting processes
 
 #### **For Researchers:**
-- **Avoid**: Neural SDE + Signature Scoring combinations (poor distribution matching)
-- **Focus**: Neural SDE generators with T-Statistic or MMD losses
-- **Signatures**: Stick with truncated signatures (efficient and effective)
-- **Evaluation**: Use distribution-based metrics (KS test, empirical std) not just RMSE
+- **Multi-dataset evaluation essential** - Single dataset can be misleading
+- **Process type matters** - Architecture effectiveness depends on stochastic process characteristics
+- **Robustness vs specialization** - Consider generalization across process types
 
 ### **📊 Framework Impact:**
 
