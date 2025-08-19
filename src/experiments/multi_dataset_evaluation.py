@@ -25,7 +25,7 @@ def load_dataset_results():
     """Load evaluation results from all datasets."""
     print("📂 Loading evaluation results from all datasets...")
     
-    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian']
+    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
     all_results = []
     
     for dataset_name in datasets:

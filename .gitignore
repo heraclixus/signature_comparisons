@@ -16,6 +16,7 @@ data/
 
 # Specific directories
 signatures/sigkernel/
+models/sigker_nsdes/
 
 # IDE and editor files
 .vscode/

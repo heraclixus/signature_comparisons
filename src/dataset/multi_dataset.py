@@ -5,6 +5,8 @@ This module provides support for training and evaluating models on multiple data
 1. Ornstein-Uhlenbeck (OU) process (original)
 2. Heston stochastic volatility model
 3. Rough Bergomi (rBergomi) model
+4. Standard Brownian Motion
+5. Fractional Brownian Motion with various Hurst parameters (0.3, 0.4, 0.6, 0.7)
 
 Each dataset tests different aspects of stochastic process modeling.
 """
@@ -22,6 +24,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from dataset.generative_model import gen_data, get_signal  # Original OU process
 from dataset.Heston import HestonModel
 from dataset.rBergomi import rBergomi
+from dataset.fractional_brownian import create_fbm_datasets, get_fbm_dataset
 
 
 def generate_heston_data(num_samples: int = 1000, n_points: int = 100, 
@@ -236,15 +239,61 @@ class MultiDatasetManager:
                 'generator': generate_brownian_motion_data,
                 'description': 'Simple Brownian motion for baseline comparison',
                 'params': {'num_samples': 1000, 'n_points': 100, 'mu': 0.0, 'sigma': 1.0}
+            },
+            'fbm_h03': {
+                'name': 'Fractional Brownian Motion H=0.3',
+                'generator': lambda **kwargs: self._generate_fbm_data(hurst=0.3, **kwargs),
+                'description': 'Anti-persistent FBM (mean-reverting, H < 0.5)',
+                'params': {'num_samples': 1000, 'n_points': 100}
+            },
+            'fbm_h04': {
+                'name': 'Fractional Brownian Motion H=0.4',
+                'generator': lambda **kwargs: self._generate_fbm_data(hurst=0.4, **kwargs),
+                'description': 'Anti-persistent FBM (mean-reverting, H < 0.5)',
+                'params': {'num_samples': 1000, 'n_points': 100}
+            },
+            'fbm_h06': {
+                'name': 'Fractional Brownian Motion H=0.6',
+                'generator': lambda **kwargs: self._generate_fbm_data(hurst=0.6, **kwargs),
+                'description': 'Persistent FBM (trending, H > 0.5)',
+                'params': {'num_samples': 1000, 'n_points': 100}
+            },
+            'fbm_h07': {
+                'name': 'Fractional Brownian Motion H=0.7',
+                'generator': lambda **kwargs: self._generate_fbm_data(hurst=0.7, **kwargs),
+                'description': 'Persistent FBM (trending, H > 0.5)',
+                'params': {'num_samples': 1000, 'n_points': 100}
             }
         }
+    
+    def _generate_fbm_data(self, hurst: float, num_samples: int = 1000, n_points: int = 100, **kwargs) -> torch.utils.data.TensorDataset:
+        """
+        Generate Fractional Brownian Motion dataset.
+        
+        Args:
+            hurst: Hurst parameter
+            num_samples: Number of sample paths
+            n_points: Number of time points per path
+            
+        Returns:
+            TensorDataset with FBM paths
+        """
+        # Generate FBM data using our implementation
+        fbm_data = get_fbm_dataset(hurst=hurst, num_samples=num_samples, n_points=n_points)
+        
+        # Convert to TensorDataset format
+        # fbm_data shape: (num_samples, 2, n_points)
+        # Create dummy labels (zeros)
+        labels = torch.zeros(num_samples, dtype=torch.long)
+        
+        return torchdata.TensorDataset(fbm_data, labels)
     
     def get_dataset(self, dataset_name: str, **kwargs) -> torch.utils.data.TensorDataset:
         """
         Get a specific dataset.
         
         Args:
-            dataset_name: Name of dataset ('ou_process', 'heston', 'rbergomi', 'brownian')
+            dataset_name: Name of dataset ('ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07')
             **kwargs: Override default parameters
             
         Returns:

@@ -244,7 +244,7 @@ def evaluate_all_models_enhanced():
     print("Evaluating models across all available datasets")
     
     # Define available datasets
-    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian']
+    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
     
     all_results = {}
     

@@ -476,7 +476,11 @@ def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: b
         'ou_process': None,  # Use existing OU data generation
         'heston': dataset_manager.get_dataset('heston', num_samples=256),
         'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=256),
-        'brownian': dataset_manager.get_dataset('brownian', num_samples=256)
+        'brownian': dataset_manager.get_dataset('brownian', num_samples=256),
+        'fbm_h03': dataset_manager.get_dataset('fbm_h03', num_samples=256),
+        'fbm_h04': dataset_manager.get_dataset('fbm_h04', num_samples=256),
+        'fbm_h06': dataset_manager.get_dataset('fbm_h06', num_samples=256),
+        'fbm_h07': dataset_manager.get_dataset('fbm_h07', num_samples=256)
     }
     
     print(f"Training on {len(datasets)} datasets:")
@@ -787,7 +791,7 @@ def main():
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--force", type=str, help="Force retrain specific model")
     parser.add_argument("--retrain-all", action="store_true", help="Force retrain all models (ignores existing checkpoints)")
-    parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian)")
+    parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian, fbm_h03, fbm_h04, fbm_h06, fbm_h07)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
     parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
     
@@ -795,7 +799,7 @@ def main():
     
     if args.list:
         # List models for all datasets
-        datasets = ['ou_process', 'heston', 'rbergomi', 'brownian']
+        datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
         for dataset_name in datasets:
             if os.path.exists(f'results/{dataset_name}'):
                 print(f"\n{dataset_name.upper()} Dataset:")
