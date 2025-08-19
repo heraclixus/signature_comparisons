@@ -259,7 +259,6 @@ def _get_default_configs(generator_type: GeneratorType,
 IMPLEMENTED_EXPERIMENTS = {
     "A1": create_experiment_config(
         "A1", GeneratorType.CANNED_NET, LossType.T_STATISTIC, SignatureMethod.TRUNCATED,
-        name="CannedNet + T-Statistic + Truncated",
         status="implemented",
         priority="high",
         description="Original deep_signature_transform implementation"
@@ -267,7 +266,6 @@ IMPLEMENTED_EXPERIMENTS = {
     
     "B1": create_experiment_config(
         "B1", GeneratorType.NEURAL_SDE, LossType.SIGNATURE_SCORING, SignatureMethod.PDE_SOLVED,
-        name="Neural SDE + Signature Scoring + PDE-Solved",
         status="implemented", 
         priority="high",
         description="Non-adversarial sigker_nsdes implementation"
@@ -275,7 +273,6 @@ IMPLEMENTED_EXPERIMENTS = {
     
     "B2": create_experiment_config(
         "B2", GeneratorType.NEURAL_SDE, LossType.SIGNATURE_MMD, SignatureMethod.PDE_SOLVED,
-        name="Neural SDE + MMD + PDE-Solved",
         status="implemented",
         priority="high", 
         description="Non-adversarial MMD sigker_nsdes implementation"
@@ -285,49 +282,42 @@ IMPLEMENTED_EXPERIMENTS = {
 PROPOSED_EXPERIMENTS = {
     "A2": create_experiment_config(
         "A2", GeneratorType.CANNED_NET, LossType.SIGNATURE_SCORING, SignatureMethod.TRUNCATED,
-        name="CannedNet + Signature Scoring + Truncated",
         priority="high",
         description="Test scoring rule with signature-aware architecture"
     ),
     
     "A3": create_experiment_config(
         "A3", GeneratorType.CANNED_NET, LossType.SIGNATURE_MMD, SignatureMethod.TRUNCATED,
-        name="CannedNet + MMD + Truncated",
         priority="high",
         description="Compare MMD vs T-statistic with same architecture"
     ),
     
     "B3": create_experiment_config(
         "B3", GeneratorType.NEURAL_SDE, LossType.T_STATISTIC, SignatureMethod.PDE_SOLVED,
-        name="Neural SDE + T-Statistic + PDE-Solved", 
         priority="high",
         description="Physical dynamics + robust loss"
     ),
     
     "B4": create_experiment_config(
         "B4", GeneratorType.NEURAL_SDE, LossType.T_STATISTIC, SignatureMethod.TRUNCATED,
-        name="Neural SDE + T-Statistic + Truncated",
         priority="high",
         description="Physical dynamics + efficient signatures"
     ),
     
     "C1": create_experiment_config(
         "C1", GeneratorType.RNN, LossType.T_STATISTIC, SignatureMethod.TRUNCATED,
-        name="RNN + T-Statistic + Truncated",
         priority="high",
         description="Baseline comparison with standard architectures"
     ),
     
     "C2": create_experiment_config(
         "C2", GeneratorType.RNN, LossType.SIGNATURE_SCORING, SignatureMethod.TRUNCATED,
-        name="RNN + Signature Scoring + Truncated",
         priority="high",
         description="Test scoring rule with standard RNN"
     ),
     
     "C3": create_experiment_config(
         "C3", GeneratorType.RNN, LossType.SIGNATURE_MMD, SignatureMethod.TRUNCATED,
-        name="RNN + MMD + Truncated",
         priority="high",
         description="Standard architecture with signature-based MMD"
     )

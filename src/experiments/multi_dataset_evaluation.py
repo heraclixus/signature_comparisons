@@ -22,22 +22,34 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 
 def load_dataset_results():
-    """Load evaluation results from all datasets."""
-    print("📂 Loading evaluation results from all datasets...")
+    """Load evaluation results from all datasets, including adversarial variants."""
+    print("📂 Loading evaluation results from all datasets (including adversarial)...")
     
-    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
+    base_datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
     all_results = []
     
-    for dataset_name in datasets:
+    for dataset_name in base_datasets:
+        # Load non-adversarial results
         results_path = f'results/{dataset_name}/evaluation/enhanced_models_evaluation.csv'
-        
         if os.path.exists(results_path):
-            print(f"   ✅ Loading {dataset_name} results...")
+            print(f"   ✅ Loading {dataset_name} non-adversarial results...")
             df = pd.read_csv(results_path)
             df['dataset'] = dataset_name
+            df['training_type'] = 'non_adversarial'
             all_results.append(df)
+        
+        # Load adversarial results
+        adv_results_path = f'results/{dataset_name}_adversarial/evaluation/enhanced_models_evaluation.csv'
+        if os.path.exists(adv_results_path):
+            print(f"   ⚔️ Loading {dataset_name} adversarial results...")
+            adv_df = pd.read_csv(adv_results_path)
+            adv_df['dataset'] = dataset_name
+            adv_df['training_type'] = 'adversarial'
+            # Add base model ID for comparison
+            adv_df['base_model_id'] = adv_df['model_id'].str.replace('_ADV', '')
+            all_results.append(adv_df)
         else:
-            print(f"   ⚠️ No results found for {dataset_name} at {results_path}")
+            print(f"   ⚠️ No adversarial results found for {dataset_name}")
     
     if not all_results:
         print("❌ No evaluation results found!")
@@ -46,7 +58,9 @@ def load_dataset_results():
     
     # Combine all results
     combined_df = pd.concat(all_results, ignore_index=True)
-    print(f"✅ Loaded results for {len(all_results)} datasets, {len(combined_df)} total evaluations")
+    print(f"✅ Loaded results for {len(base_datasets)} datasets, {len(combined_df)} total evaluations")
+    print(f"   Non-adversarial models: {len(combined_df[combined_df['training_type'] == 'non_adversarial'])}")
+    print(f"   Adversarial models: {len(combined_df[combined_df['training_type'] == 'adversarial'])}")
     
     return combined_df
 
@@ -161,71 +175,111 @@ def create_comprehensive_visualizations(rankings_df: pd.DataFrame, overall_df: p
     datasets = rankings_df['dataset'].unique()
     models = overall_df['model_id'].tolist()
     
-    # Create figure with 1x2 layout for clean comparison
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    # Create two completely separate plots for better clarity
+    create_distributional_ranking_plot(overall_df, save_dir)
+    create_rmse_ranking_plot(overall_df, save_dir)
     
-    # Overall title
-    fig.suptitle('Cross-Dataset Model Performance: Distributional vs Point-wise Analysis', 
-                 fontsize=18, fontweight='bold', y=0.98)
+    print(f"✅ Comprehensive analysis saved to: {save_dir}/")
+
+
+def create_distributional_ranking_plot(overall_df: pd.DataFrame, save_dir: str):
+    """Create a clean distributional quality ranking plot."""
+    print("   📊 Creating distributional quality ranking plot...")
     
-    # 1. Distributional Quality Ranking (Primary Focus)
-    ax1 = axes[0]
-    # Sort models by distributional score for this plot
+    # Sort models by distributional score
     dist_sorted_df = overall_df.sort_values('distributional_score').reset_index(drop=True)
     dist_sorted_models = dist_sorted_df['model_id'].tolist()
     dist_values = dist_sorted_df['distributional_score'].tolist()
     
+    # Create figure with more space
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+    
     # Create gradient colors from best (dark green) to worst (light green)
     colors = plt.cm.Greens_r(np.linspace(0.3, 0.9, len(dist_sorted_models)))
     
-    bars1 = ax1.bar(range(len(dist_sorted_models)), dist_values, 
-                    color=colors, edgecolor='darkgreen', linewidth=1.5)
-    ax1.set_title('Distributional Quality Ranking\n(KS Statistic + Wasserstein Distance)', 
-                  fontsize=14, fontweight='bold', pad=20)
-    ax1.set_ylabel('Distributional Score (Lower = Better)', fontsize=12)
-    ax1.set_xticks(range(len(dist_sorted_models)))
-    ax1.set_xticklabels(dist_sorted_models, rotation=0, fontsize=11, fontweight='bold')
-    ax1.grid(True, alpha=0.3, axis='y')
+    bars = ax.bar(range(len(dist_sorted_models)), dist_values, 
+                  color=colors, edgecolor='darkgreen', linewidth=2, alpha=0.8)
     
-    # Add value labels above bars with better spacing
-    for i, (bar, value) in enumerate(zip(bars1, dist_values)):
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(dist_values) * 0.03,
-                f'{value:.2f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
-        # Add rank number inside bars
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 0.5,
-                f'#{i+1}', ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+    # Title and labels with better spacing
+    ax.set_title('Cross-Dataset Distributional Quality Ranking\n(KS Statistic + Wasserstein Distance)', 
+                 fontsize=16, fontweight='bold', pad=30)
+    ax.set_ylabel('Average Distributional Score (Lower = Better)', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Models (Sorted by Performance)', fontsize=14, fontweight='bold')
     
-    # 2. RMSE Accuracy Ranking (Secondary Focus)  
-    ax2 = axes[1]
-    # Sort models by RMSE for this plot
+    # X-axis labels with better spacing
+    ax.set_xticks(range(len(dist_sorted_models)))
+    ax.set_xticklabels(dist_sorted_models, rotation=45, ha='right', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels above bars with better positioning
+    max_val = max(dist_values)
+    for i, (bar, value) in enumerate(zip(bars, dist_values)):
+        # Value above bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val * 0.02,
+                f'{value:.2f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+        # Rank number inside bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 0.5,
+                f'#{i+1}', ha='center', va='center', fontsize=14, fontweight='bold', color='white')
+    
+    # Add legend explaining the metrics
+    ax.text(0.02, 0.98, 'Lower scores = Better distributional matching\nBased on KS statistic & Wasserstein distance', 
+            transform=ax.transAxes, fontsize=10, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, 'distributional_quality_ranking.png'), 
+                dpi=300, bbox_inches='tight')
+    print(f"   ✅ Distributional ranking saved to: distributional_quality_ranking.png")
+
+
+def create_rmse_ranking_plot(overall_df: pd.DataFrame, save_dir: str):
+    """Create a clean RMSE accuracy ranking plot."""
+    print("   📊 Creating RMSE accuracy ranking plot...")
+    
+    # Sort models by RMSE rank
     rmse_sorted_df = overall_df.sort_values('rmse_rank_mean').reset_index(drop=True)
     rmse_sorted_models = rmse_sorted_df['model_id'].tolist()
     rmse_values = rmse_sorted_df['rmse_rank_mean'].tolist()
     
-    # Create gradient colors from best (dark red) to worst (light red)
-    colors_rmse = plt.cm.Reds_r(np.linspace(0.3, 0.9, len(rmse_sorted_models)))
+    # Create figure with more space
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
     
-    bars2 = ax2.bar(range(len(rmse_sorted_models)), rmse_values, 
-                    color=colors_rmse, edgecolor='darkred', linewidth=1.5)
-    ax2.set_title('Point-wise Accuracy Ranking\n(RMSE Trajectory Matching)', 
-                  fontsize=14, fontweight='bold', pad=20)
-    ax2.set_ylabel('Average RMSE Rank (Lower = Better)', fontsize=12)
-    ax2.set_xticks(range(len(rmse_sorted_models)))
-    ax2.set_xticklabels(rmse_sorted_models, rotation=0, fontsize=11, fontweight='bold')
-    ax2.grid(True, alpha=0.3, axis='y')
+    # Create gradient colors from best (dark blue) to worst (light blue)
+    colors = plt.cm.Blues_r(np.linspace(0.3, 0.9, len(rmse_sorted_models)))
     
-    # Add value labels above bars with better spacing
-    for i, (bar, value) in enumerate(zip(bars2, rmse_values)):
-        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(rmse_values) * 0.03,
-                f'{value:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
-        # Add rank number inside bars
-        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 0.5,
-                f'#{i+1}', ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+    bars = ax.bar(range(len(rmse_sorted_models)), rmse_values, 
+                  color=colors, edgecolor='darkblue', linewidth=2, alpha=0.8)
+    
+    # Title and labels with better spacing
+    ax.set_title('Cross-Dataset Point-wise Accuracy Ranking\n(RMSE Trajectory Matching)', 
+                 fontsize=16, fontweight='bold', pad=30)
+    ax.set_ylabel('Average RMSE Rank (Lower = Better)', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Models (Sorted by Performance)', fontsize=14, fontweight='bold')
+    
+    # X-axis labels with better spacing
+    ax.set_xticks(range(len(rmse_sorted_models)))
+    ax.set_xticklabels(rmse_sorted_models, rotation=45, ha='right', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels above bars with better positioning
+    max_val = max(rmse_values)
+    for i, (bar, value) in enumerate(zip(bars, rmse_values)):
+        # Value above bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val * 0.02,
+                f'{value:.1f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+        # Rank number inside bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 0.5,
+                f'#{i+1}', ha='center', va='center', fontsize=14, fontweight='bold', color='white')
+    
+    # Add legend explaining the metrics
+    ax.text(0.02, 0.98, 'Lower ranks = Better trajectory matching\nBased on RMSE across all datasets', 
+            transform=ax.transAxes, fontsize=10, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
     
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, 'comprehensive_cross_dataset_analysis.png'), 
+    plt.savefig(os.path.join(save_dir, 'rmse_accuracy_ranking.png'), 
                 dpi=300, bbox_inches='tight')
-    print(f"✅ Comprehensive analysis saved to: {save_dir}/comprehensive_cross_dataset_analysis.png")
+    print(f"   ✅ RMSE ranking saved to: rmse_accuracy_ranking.png")
 
 
 def run_cross_dataset_analysis():

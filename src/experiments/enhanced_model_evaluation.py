@@ -238,45 +238,374 @@ def evaluate_models_for_dataset(dataset_name: str):
 
 
 def evaluate_all_models_enhanced():
-    """Enhanced evaluation of all trained models across all datasets."""
+    """Enhanced evaluation of all trained models across all datasets, including adversarial variants."""
     print("🎯 Enhanced Model Evaluation with Trajectory Analysis")
     print("=" * 70)
-    print("Evaluating models across all available datasets")
+    print("Evaluating models across all available datasets (including adversarial variants)")
     
     # Define available datasets
-    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
+    base_datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
     
     all_results = {}
     
-    for dataset_name in datasets:
-        # Check if dataset directory exists
+    for dataset_name in base_datasets:
+        # Evaluate both non-adversarial and adversarial models for each dataset
+        dataset_results = {}
+        
+        # 1. Evaluate non-adversarial models
         dataset_dir = f'results/{dataset_name}'
-        if not os.path.exists(dataset_dir):
-            print(f"\n⏭️ Skipping {dataset_name}: No results directory found")
-            continue
+        if os.path.exists(dataset_dir):
+            print(f"\n📊 Evaluating non-adversarial models for {dataset_name}...")
+            results_df, trajectory_data = evaluate_models_for_dataset(dataset_name)
+            if results_df is not None:
+                dataset_results['non_adversarial'] = {
+                    'results_df': results_df,
+                    'trajectory_data': trajectory_data
+                }
         
-        # Evaluate models for this dataset
-        results_df, trajectory_data = evaluate_models_for_dataset(dataset_name)
+        # 2. Evaluate adversarial models
+        adv_dataset_dir = f'results/{dataset_name}_adversarial'
+        if os.path.exists(adv_dataset_dir):
+            print(f"\n⚔️ Evaluating adversarial models for {dataset_name}...")
+            adv_results_df, adv_trajectory_data = evaluate_adversarial_models_for_dataset(dataset_name)
+            if adv_results_df is not None:
+                dataset_results['adversarial'] = {
+                    'results_df': adv_results_df,
+                    'trajectory_data': adv_trajectory_data
+                }
         
-        if results_df is not None:
-            all_results[dataset_name] = {
-                'results_df': results_df,
-                'trajectory_data': trajectory_data
-            }
+        # Store results if we have any data for this dataset
+        if dataset_results:
+            all_results[dataset_name] = dataset_results
     
     if not all_results:
         print("\n❌ No datasets with trained models found")
         return None, None
     
+    # Create comprehensive comparison analysis
+    create_adversarial_comparison_analysis(all_results)
+    
     print(f"\n{'='*70}")
-    print("🎉 MULTI-DATASET EVALUATION COMPLETE")
+    print("🎉 MULTI-DATASET EVALUATION COMPLETE (Including Adversarial)")
     print(f"{'='*70}")
     print(f"Datasets evaluated: {list(all_results.keys())}")
     for dataset_name in all_results.keys():
-        num_models = len(all_results[dataset_name]['results_df'])
-        print(f"   {dataset_name}: {num_models} models evaluated")
+        dataset_data = all_results[dataset_name]
+        non_adv_count = len(dataset_data.get('non_adversarial', {}).get('results_df', []))
+        adv_count = len(dataset_data.get('adversarial', {}).get('results_df', []))
+        print(f"   {dataset_name}: {non_adv_count} non-adversarial, {adv_count} adversarial models")
     
     return all_results
+
+
+def evaluate_adversarial_models_for_dataset(dataset_name: str):
+    """Evaluate adversarial models for a specific dataset."""
+    print(f"\n{'='*70}")
+    print(f"⚔️ Enhanced Adversarial Model Evaluation for {dataset_name.upper()} Dataset")
+    print(f"{'='*70}")
+    
+    # Setup adversarial checkpoint manager
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}_adversarial')
+    
+    # Get list of trained adversarial models
+    available_models = checkpoint_manager.list_available_models()
+    
+    if not available_models:
+        print(f"❌ No trained adversarial models found for {dataset_name}")
+        return None, None
+    
+    print(f"Found {len(available_models)} trained adversarial models for {dataset_name}:")
+    checkpoint_manager.print_available_models()
+    
+    # Setup evaluation data (same as non-adversarial)
+    print(f"\nSetting up evaluation data for {dataset_name}_adversarial...")
+    if dataset_name == 'ou_process':
+        dataset = get_signal(num_samples=64)
+        eval_data = torch.stack([dataset[i][0] for i in range(32)])
+    else:
+        dataset = get_signal(num_samples=64)
+        eval_data = torch.stack([dataset[i][0] for i in range(32)])
+        print(f"   Note: Using OU process data as evaluation baseline for {dataset_name}")
+    
+    print(f"Evaluation data: {eval_data.shape}")
+    
+    # Import adversarial training functions
+    sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
+    from adversarial_training import create_adversarial_model
+    
+    # Evaluate each adversarial model
+    results = []
+    trajectory_data = {}
+    
+    for model_id in available_models:
+        print(f"\n{'='*50}")
+        print(f"Evaluating {model_id}")
+        print(f"{'='*50}")
+        
+        try:
+            # Extract base model ID
+            base_model_id = model_id.replace('_ADV', '')
+            
+            # Recreate adversarial model (since they can't be loaded directly)
+            print(f"Recreating adversarial model {model_id} from base {base_model_id}...")
+            
+            # Setup data for model creation
+            example_batch = torch.randn(8, 2, 100)
+            signals = eval_data
+            
+            # Create adversarial model
+            adversarial_model = create_adversarial_model(
+                base_model_id=base_model_id,
+                example_batch=example_batch,
+                real_data=signals,
+                adversarial=True,
+                memory_efficient=True
+            )
+            
+            # Load the trained weights
+            model_dir = f'results/{dataset_name}_adversarial/trained_models/{model_id}'
+            model_path = os.path.join(model_dir, 'model.pth')
+            if os.path.exists(model_path):
+                state_dict = torch.load(model_path, map_location='cpu')
+                adversarial_model.load_state_dict(state_dict)
+                print(f"✅ Loaded trained weights for {model_id}")
+            else:
+                print(f"⚠️ No trained weights found for {model_id}, using initialized model")
+            
+            checkpoint_info = checkpoint_manager.get_checkpoint_info(model_id)
+            print(f"✅ Model {model_id} loaded successfully")
+            print(f"Model loaded: {sum(p.numel() for p in adversarial_model.parameters()):,} parameters")
+            print(f"Training: Epoch {checkpoint_info['epoch']}, Loss {checkpoint_info['loss']:.6f}")
+            
+            # Generate evaluation samples
+            adversarial_model.eval()
+            with torch.no_grad():
+                samples = adversarial_model.generate_samples(64)
+                print(f"Generated samples: {samples.shape}")
+                
+                # Generate 20 trajectories for visualization
+                trajectories = adversarial_model.generate_samples(20)
+                print(f"Generated trajectories for visualization: {trajectories.shape}")
+            
+            # Compute core metrics
+            metrics = compute_core_metrics(samples, eval_data)
+            
+            # Compute empirical std analysis
+            std_analysis = compute_empirical_std_analysis(trajectories, eval_data)
+            
+            # Combine results
+            result = {
+                'model_id': model_id,
+                'training_epoch': checkpoint_info['epoch'],
+                'training_loss': checkpoint_info['loss'],
+                'total_parameters': sum(p.numel() for p in adversarial_model.parameters()),
+                'model_class': type(adversarial_model).__name__,
+                **metrics,
+                'std_rmse': std_analysis['std_rmse'],
+                'std_correlation': std_analysis['std_correlation'],
+                'std_mean_absolute_error': std_analysis['std_mean_absolute_error']
+            }
+            
+            results.append(result)
+            
+            # Store trajectory data for visualization
+            trajectory_data[model_id] = {
+                'trajectories': trajectories.detach().cpu().numpy(),
+                'empirical_std_generated': std_analysis['empirical_std_generated'],
+                'empirical_std_ground_truth': std_analysis['empirical_std_ground_truth'],
+                'time_steps': std_analysis['time_steps']
+            }
+            
+            print(f"✅ {model_id} evaluation completed")
+            print(f"   RMSE: {metrics['rmse']:.4f}")
+            print(f"   KS Statistic: {metrics['ks_statistic']:.4f}")
+            print(f"   Std RMSE: {std_analysis['std_rmse']:.4f}")
+            print(f"   Std Correlation: {std_analysis['std_correlation']:.4f}")
+            
+        except Exception as e:
+            print(f"❌ Failed to evaluate {model_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    if not results:
+        print("❌ No adversarial models successfully evaluated")
+        return None, None
+    
+    # Save results to adversarial evaluation directory
+    results_df = pd.DataFrame(results)
+    save_dir = f"results/{dataset_name}_adversarial/evaluation"
+    os.makedirs(save_dir, exist_ok=True)
+    
+    results_path = os.path.join(save_dir, 'enhanced_models_evaluation.csv')
+    results_df.to_csv(results_path, index=False)
+    
+    print(f"\n{'='*60}")
+    print(f"ENHANCED EVALUATION COMPLETE FOR {dataset_name.upper()}_ADVERSARIAL")
+    print(f"{'='*60}")
+    print(f"Results saved to: {results_path}")
+    print(f"Adversarial models evaluated: {len(results)}")
+    
+    # Create enhanced visualizations for adversarial models
+    create_enhanced_visualizations(results_df, trajectory_data, save_dir, f"{dataset_name}_adversarial")
+    
+    return results_df, trajectory_data
+
+
+def create_adversarial_comparison_analysis(all_results: Dict):
+    """Create comprehensive adversarial vs non-adversarial comparison analysis."""
+    print("\n🎯 Creating Adversarial vs Non-Adversarial Comparison Analysis...")
+    
+    # Combine all results across datasets
+    combined_non_adv = []
+    combined_adv = []
+    
+    for dataset_name, dataset_data in all_results.items():
+        # Non-adversarial results
+        if 'non_adversarial' in dataset_data:
+            non_adv_df = dataset_data['non_adversarial']['results_df'].copy()
+            non_adv_df['dataset'] = dataset_name
+            non_adv_df['training_type'] = 'non_adversarial'
+            combined_non_adv.append(non_adv_df)
+        
+        # Adversarial results
+        if 'adversarial' in dataset_data:
+            adv_df = dataset_data['adversarial']['results_df'].copy()
+            adv_df['dataset'] = dataset_name
+            adv_df['training_type'] = 'adversarial'
+            # Clean up model IDs (remove _ADV suffix for comparison)
+            adv_df['base_model_id'] = adv_df['model_id'].str.replace('_ADV', '')
+            combined_adv.append(adv_df)
+    
+    if not combined_non_adv and not combined_adv:
+        print("❌ No results to compare")
+        return
+    
+    # Create comparison directory
+    comparison_dir = 'results/adversarial_comparison'
+    os.makedirs(comparison_dir, exist_ok=True)
+    
+    # Combine all results
+    all_combined = []
+    if combined_non_adv:
+        non_adv_combined = pd.concat(combined_non_adv, ignore_index=True)
+        all_combined.append(non_adv_combined)
+    if combined_adv:
+        adv_combined = pd.concat(combined_adv, ignore_index=True)
+        all_combined.append(adv_combined)
+    
+    if all_combined:
+        full_combined = pd.concat(all_combined, ignore_index=True)
+        
+        # Create visualizations
+        create_adversarial_vs_non_adversarial_plots(non_adv_combined if combined_non_adv else pd.DataFrame(), 
+                                                   adv_combined if combined_adv else pd.DataFrame(), 
+                                                   full_combined, comparison_dir)
+        
+        # Save combined results
+        full_combined.to_csv(os.path.join(comparison_dir, 'all_models_combined_results.csv'), index=False)
+        if combined_non_adv:
+            non_adv_combined.to_csv(os.path.join(comparison_dir, 'non_adversarial_results.csv'), index=False)
+        if combined_adv:
+            adv_combined.to_csv(os.path.join(comparison_dir, 'adversarial_results.csv'), index=False)
+        
+        print(f"✅ Adversarial comparison analysis saved to: {comparison_dir}/")
+
+
+def create_adversarial_vs_non_adversarial_plots(non_adv_df: pd.DataFrame, adv_df: pd.DataFrame, 
+                                               combined_df: pd.DataFrame, save_dir: str):
+    """Create adversarial vs non-adversarial comparison plots."""
+    print("🎨 Creating adversarial vs non-adversarial comparison plots...")
+    
+    # Find models that have both adversarial and non-adversarial variants
+    if not adv_df.empty:
+        adv_base_models = set(adv_df['base_model_id'].unique())
+    else:
+        adv_base_models = set()
+    
+    if not non_adv_df.empty:
+        non_adv_models = set(non_adv_df['model_id'].unique())
+    else:
+        non_adv_models = set()
+    
+    # Models with both variants
+    paired_models = adv_base_models.intersection(non_adv_models)
+    
+    if not paired_models:
+        print("⚠️ No models found with both adversarial and non-adversarial variants")
+        return
+    
+    print(f"Found {len(paired_models)} models with both variants: {sorted(paired_models)}")
+    
+    # Create comparison plots
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Adversarial vs Non-Adversarial Training Comparison', fontsize=18, fontweight='bold')
+    
+    # 1. RMSE Comparison
+    ax1 = axes[0, 0]
+    create_paired_comparison_plot(ax1, non_adv_df, adv_df, paired_models, 'rmse', 
+                                 'RMSE Comparison', 'RMSE (Lower = Better)')
+    
+    # 2. KS Statistic Comparison  
+    ax2 = axes[0, 1]
+    create_paired_comparison_plot(ax2, non_adv_df, adv_df, paired_models, 'ks_statistic',
+                                 'KS Statistic Comparison', 'KS Statistic (Lower = Better)')
+    
+    # 3. Wasserstein Distance Comparison
+    ax3 = axes[1, 0]
+    create_paired_comparison_plot(ax3, non_adv_df, adv_df, paired_models, 'wasserstein_distance',
+                                 'Wasserstein Distance Comparison', 'Wasserstein Distance (Lower = Better)')
+    
+    # 4. Std RMSE Comparison
+    ax4 = axes[1, 1]
+    create_paired_comparison_plot(ax4, non_adv_df, adv_df, paired_models, 'std_rmse',
+                                 'Empirical Std RMSE Comparison', 'Std RMSE (Lower = Better)')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, 'adversarial_vs_non_adversarial_comparison.png'), 
+                dpi=300, bbox_inches='tight')
+    print(f"✅ Adversarial vs non-adversarial comparison saved to: {save_dir}/adversarial_vs_non_adversarial_comparison.png")
+
+
+def create_paired_comparison_plot(ax, non_adv_df: pd.DataFrame, adv_df: pd.DataFrame, 
+                                 paired_models: set, metric: str, title: str, ylabel: str):
+    """Create a paired comparison plot for a specific metric."""
+    models = sorted(paired_models)
+    non_adv_values = []
+    adv_values = []
+    
+    for model in models:
+        # Get non-adversarial value (average across datasets)
+        non_adv_data = non_adv_df[non_adv_df['model_id'] == model]
+        non_adv_val = non_adv_data[metric].mean() if len(non_adv_data) > 0 else np.nan
+        non_adv_values.append(non_adv_val)
+        
+        # Get adversarial value (average across datasets)
+        adv_data = adv_df[adv_df['base_model_id'] == model]
+        adv_val = adv_data[metric].mean() if len(adv_data) > 0 else np.nan
+        adv_values.append(adv_val)
+    
+    x = np.arange(len(models))
+    width = 0.35
+    
+    bars1 = ax.bar(x - width/2, non_adv_values, width, label='Non-Adversarial', 
+                   color='skyblue', alpha=0.8, edgecolor='navy')
+    bars2 = ax.bar(x + width/2, adv_values, width, label='Adversarial', 
+                   color='coral', alpha=0.8, edgecolor='darkred')
+    
+    ax.set_title(title, fontweight='bold', fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=11)
+    ax.set_xticks(x)
+    ax.set_xticklabels(models, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels on bars
+    for bars, values in [(bars1, non_adv_values), (bars2, adv_values)]:
+        for bar, value in zip(bars, values):
+            if not np.isnan(value):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(non_adv_values + adv_values) * 0.01,
+                       f'{value:.3f}', ha='center', va='bottom', fontsize=9)
 
 
 def create_enhanced_visualizations(results_df: pd.DataFrame, trajectory_data: Dict, save_dir: str, dataset_name: str = None):
