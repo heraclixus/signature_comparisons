@@ -1,18 +1,62 @@
-results/ou_process/trained_models/
-results/brownian/trained_models/
-results/heston/trained_models/
-results/rbergomi/trained_models/
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Training results and models
+results/*/trained_models/
+
+# Data and notebooks
 notebooks/
 data/
-signatures/__pycache__/
-signatures/src/__pycache__/
-signatures/src/utils/__pycache__/
-signatures/src/utils/helper_functions/__pycache__/
-signatures/src/utils/helper_functions/data_helper_functions/__pycache__/
-signatures/src/utils/helper_functions/plot_helper_functions/__pycache__/
-signatures/src/utils/helper_functions/global_helper_functions/__pycache__/
-signatures/src/utils/helper_functions/global_helper_functions/data_helper_functions/__pycache__/
-signatures/src/utils/helper_functions/global_helper_functions/plot_helper_functions/__pycache__/
-signatures/src/utils/helper_functions/global_helper_functions/global_helper_functions/__pycache__/
+
+# Specific directories
 signatures/sigkernel/
-models/__pycache__
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
