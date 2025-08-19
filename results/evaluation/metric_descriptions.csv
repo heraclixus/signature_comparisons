@@ -1,0 +1,35 @@
+metric,description,type
+model_name,Name identifier of the model,informational
+rmse,Root Mean Square Error between generated and ground truth (lower is better),lower_better
+ks_statistic,Kolmogorov-Smirnov test statistic (lower means more similar distributions),lower_better
+ks_p_value,KS test p-value (higher means distributions are more similar),higher_better
+distributions_similar,Whether distributions are statistically similar (True is better),informational
+wasserstein_distance,Wasserstein distance between distributions (lower is better),lower_better
+generated_mean,Mean of generated samples,informational
+generated_std,Standard deviation of generated samples,informational
+ground_truth_mean,Mean of ground truth samples,informational
+ground_truth_std,Standard deviation of ground truth samples,informational
+mean_relative_error,Relative error in mean (lower is better),lower_better
+std_relative_error,Relative error in standard deviation (lower is better),lower_better
+generated_skewness,Skewness of generated distribution,informational
+generated_kurtosis,Kurtosis of generated distribution,informational
+ground_truth_skewness,Skewness of ground truth distribution,informational
+ground_truth_kurtosis,Kurtosis of ground truth distribution,informational
+mean_path_correlation,Mean correlation between generated and ground truth paths (higher is better),higher_better
+std_path_correlation,Standard deviation of path correlations,higher_better
+min_path_correlation,Minimum path correlation,higher_better
+max_path_correlation,Maximum path correlation,higher_better
+generated_range,Range (max-min) of generated samples,informational
+ground_truth_range,Range (max-min) of ground truth samples,informational
+range_ratio,Ratio of generated to ground truth range (closer to 1 is better),informational
+generated_finite_ratio,Proportion of finite values in generated samples (should be 1.0),informational
+ground_truth_finite_ratio,Proportion of finite values in ground truth (should be 1.0),informational
+total_parameters,Total number of model parameters,informational
+trainable_parameters,Number of trainable model parameters,informational
+mean_forward_time_ms,Mean forward pass time in milliseconds,informational
+std_forward_time_ms,Standard deviation of forward pass times,informational
+generator_type,Type of generator architecture used,informational
+loss_type,Type of loss function used,informational
+signature_method,Signature computation method used,informational
+experiment_id,"Experiment identifier (A1, A2, etc.)",informational
+implementation_status,"Status of implementation (validated, experimental, etc.)",informational

@@ -1,4 +1,4 @@
-results/
+results/trained_models/
 notebooks/
 data/
 signatures/__pycache__/

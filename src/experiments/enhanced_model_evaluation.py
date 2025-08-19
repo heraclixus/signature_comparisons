@@ -307,54 +307,83 @@ def create_enhanced_visualizations(results_df: pd.DataFrame, trajectory_data: Di
 
 
 def create_trajectory_visualization(trajectory_data: Dict, save_dir: str):
-    """Create trajectory visualization showing 20 sample paths per model."""
-    print("Creating trajectory visualization...")
+    """Create ultra-clear trajectory visualization with equal sample counts."""
+    print("Creating ultra-clear trajectory visualization...")
     
-    # Get ground truth for comparison
+    # Get ground truth for comparison (exactly 20 samples to match generated)
     dataset = get_signal(num_samples=64)
-    ground_truth = torch.stack([dataset[i][0] for i in range(20)])
+    ground_truth = torch.stack([dataset[i][0] for i in range(20)])  # Exactly 20 samples
     gt_values = ground_truth[:, 1, :].numpy()  # Extract value dimension
+    
+    print(f"Ground truth samples: {gt_values.shape[0]} (matching generated sample count)")
     
     # Create figure with subplots for each model
     n_models = len(trajectory_data)
     n_cols = 3
     n_rows = (n_models + n_cols - 1) // n_cols
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 4 * n_rows))
-    fig.suptitle('Generated Trajectories: 20 Sample Paths per Model', fontsize=16, fontweight='bold')
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 5 * n_rows))
+    fig.suptitle('Ultra-Clear Trajectory Analysis: Generated vs Ground Truth (20 samples each)', 
+                 fontsize=18, fontweight='bold', y=0.98)
     
     if n_rows == 1:
         axes = axes.reshape(1, -1)
     
     model_names = list(trajectory_data.keys())
+    time_steps = np.linspace(0, 1, gt_values.shape[1])
     
     for i, model_id in enumerate(model_names):
         row = i // n_cols
         col = i % n_cols
         ax = axes[row, col]
         
-        # Plot ground truth trajectories (light gray)
-        time_steps = np.linspace(0, 1, gt_values.shape[1])
-        for j in range(min(5, gt_values.shape[0])):  # Show 5 ground truth
-            ax.plot(time_steps, gt_values[j], color='gray', alpha=0.3, linewidth=0.5)
+        # Create statistical envelopes for better understanding
+        gt_mean = np.mean(gt_values, axis=0)
+        gt_std = np.std(gt_values, axis=0)
+        
+        # Plot ground truth envelope
+        ax.fill_between(time_steps, gt_mean - gt_std, gt_mean + gt_std, 
+                       color='red', alpha=0.15, label='GT ±1σ')
+        
+        # Plot ground truth mean (very visible)
+        ax.plot(time_steps, gt_mean, color='darkred', linewidth=4, 
+               label='GT Mean', alpha=0.9, linestyle='-')
+        
+        # Plot a few individual ground truth trajectories (clearly visible)
+        for j in range(min(3, gt_values.shape[0])):
+            ax.plot(time_steps, gt_values[j], color='red', alpha=0.7, 
+                   linewidth=1.2, linestyle='--')
         
         # Plot generated trajectories
         trajectories = trajectory_data[model_id]['trajectories']
         time_steps_gen = np.linspace(0, 1, trajectories.shape[1])
         
-        for j in range(trajectories.shape[0]):
-            ax.plot(time_steps_gen, trajectories[j], alpha=0.6, linewidth=0.8)
+        # Generated envelope
+        gen_mean = np.mean(trajectories, axis=0)
+        gen_std = np.std(trajectories, axis=0)
+        ax.fill_between(time_steps_gen, gen_mean - gen_std, gen_mean + gen_std,
+                       color='blue', alpha=0.1, label='Gen ±1σ')
         
-        ax.set_title(f'{model_id}', fontweight='bold')
-        ax.set_xlabel('Time')
-        ax.set_ylabel('Value')
+        # Generated mean
+        ax.plot(time_steps_gen, gen_mean, color='darkblue', linewidth=2.5,
+               label='Gen Mean', alpha=0.8)
+        
+        # Individual generated trajectories (background)
+        for j in range(trajectories.shape[0]):
+            ax.plot(time_steps_gen, trajectories[j], color='lightblue', alpha=0.3, linewidth=0.6)
+        
+        ax.set_title(f'{model_id}', fontweight='bold', fontsize=14)
+        ax.set_xlabel('Time', fontsize=12)
+        ax.set_ylabel('Value', fontsize=12)
         ax.grid(True, alpha=0.3)
         
-        # Add legend for first subplot
+        # Add comprehensive legend for first subplot
         if i == 0:
-            ax.plot([], [], color='gray', alpha=0.5, label='Ground Truth')
-            ax.plot([], [], color='blue', alpha=0.6, label='Generated')
-            ax.legend()
+            ax.plot([], [], color='darkred', linewidth=4, alpha=0.9, label='GT Mean')
+            ax.plot([], [], color='red', linewidth=1.2, alpha=0.7, linestyle='--', label='GT Samples')
+            ax.plot([], [], color='darkblue', linewidth=2.5, alpha=0.8, label='Gen Mean')
+            ax.plot([], [], color='lightblue', linewidth=0.6, alpha=0.3, label='Gen Samples')
+            ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
     
     # Hide unused subplots
     for i in range(n_models, n_rows * n_cols):
@@ -363,8 +392,11 @@ def create_trajectory_visualization(trajectory_data: Dict, save_dir: str):
         axes[row, col].set_visible(False)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, 'trajectory_visualization.png'), dpi=300, bbox_inches='tight')
-    print(f"Trajectory visualization saved to: {os.path.join(save_dir, 'trajectory_visualization.png')}")
+    plt.savefig(os.path.join(save_dir, 'ultra_clear_trajectory_visualization.png'), dpi=300, bbox_inches='tight')
+    print(f"Ultra-clear trajectory visualization saved to: {os.path.join(save_dir, 'ultra_clear_trajectory_visualization.png')}")
+    print(f"   - Equal sample counts: 20 ground truth, 20 generated per model")
+    print(f"   - Ground truth clearly visible with dark red colors")
+    print(f"   - Statistical envelopes for better interpretation")
 
 
 def create_empirical_std_visualization(trajectory_data: Dict, save_dir: str):
