@@ -9,6 +9,8 @@ import torch
 import os
 import json
 import pickle
+import pandas as pd
+import matplotlib.pyplot as plt
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -30,7 +32,8 @@ class ModelCheckpoint:
         os.makedirs(self.models_dir, exist_ok=True)
     
     def save_model(self, model, model_id: str, epoch: int, loss: float, 
-                   metrics: Optional[Dict] = None, training_config: Optional[Dict] = None):
+                   metrics: Optional[Dict] = None, training_config: Optional[Dict] = None,
+                   training_history: Optional[Dict] = None):
         """
         Save a trained model checkpoint.
         
@@ -41,6 +44,7 @@ class ModelCheckpoint:
             loss: Training loss at checkpoint
             metrics: Optional evaluation metrics
             training_config: Optional training configuration
+            training_history: Optional training loss evolution and dynamics
         """
         # Create model-specific directory
         model_dir = os.path.join(self.models_dir, model_id)
@@ -81,10 +85,111 @@ class ModelCheckpoint:
         with open(info_path, 'w') as f:
             json.dump(checkpoint_info, f, indent=2)
         
+        # Save training history if provided
+        if training_history:
+            self._save_training_history(model_dir, model_id, training_history)
+        
         print(f"✅ Model {model_id} saved to {model_dir}")
         print(f"   Epoch: {epoch}, Loss: {loss:.6f}")
         if metrics:
             print(f"   Metrics: {len(metrics)} saved")
+        if training_history:
+            print(f"   Training history: {len(training_history.get('losses', []))} epochs saved")
+    
+    def _save_training_history(self, model_dir: str, model_id: str, training_history: Dict):
+        """Save training loss evolution and create visualization."""
+        import numpy as np
+        
+        try:
+            # Extract training data
+            losses = training_history.get('losses', [])
+            times = training_history.get('times', [])
+            epochs = list(range(1, len(losses) + 1))
+            
+            if not losses:
+                print(f"⚠️ No training losses to save for {model_id}")
+                return
+            
+            # Create training history DataFrame
+            history_data = {
+                'epoch': epochs,
+                'loss': losses,
+                'cumulative_time': np.cumsum(times) if times else [0] * len(losses),
+                'epoch_time': times if times else [0] * len(losses)
+            }
+            
+            # Add additional metrics if available
+            for key, values in training_history.items():
+                if key not in ['losses', 'times', 'model_id', 'best_loss', 'best_epoch', 'final_loss', 'total_time', 'epochs_trained']:
+                    if isinstance(values, list) and len(values) == len(losses):
+                        history_data[key] = values
+            
+            df = pd.DataFrame(history_data)
+            
+            # Save training history CSV
+            history_csv_path = os.path.join(model_dir, "training_history.csv")
+            df.to_csv(history_csv_path, index=False)
+            
+            # Create training curve visualization
+            self._create_training_curve(model_dir, model_id, df, training_history)
+            
+        except Exception as e:
+            print(f"⚠️ Failed to save training history for {model_id}: {e}")
+    
+    def _create_training_curve(self, model_dir: str, model_id: str, df: pd.DataFrame, training_history: Dict):
+        """Create training curve visualization."""
+        try:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            
+            # Loss evolution plot
+            ax1.plot(df['epoch'], df['loss'], 'b-', linewidth=2, alpha=0.8, label='Training Loss')
+            
+            # Mark best epoch
+            best_epoch = training_history.get('best_epoch', 1)
+            best_loss = training_history.get('best_loss', df['loss'].min())
+            ax1.axvline(x=best_epoch, color='red', linestyle='--', alpha=0.7, label=f'Best Epoch ({best_epoch})')
+            ax1.scatter([best_epoch], [best_loss], color='red', s=100, zorder=5)
+            
+            ax1.set_xlabel('Epoch')
+            ax1.set_ylabel('Training Loss')
+            ax1.set_title(f'{model_id} Training Loss Evolution')
+            ax1.grid(True, alpha=0.3)
+            ax1.legend()
+            
+            # Training time plot
+            if 'cumulative_time' in df.columns and df['cumulative_time'].sum() > 0:
+                ax2.plot(df['epoch'], df['cumulative_time'], 'g-', linewidth=2, alpha=0.8, label='Cumulative Time')
+                ax2.set_xlabel('Epoch')
+                ax2.set_ylabel('Cumulative Time (s)')
+                ax2.set_title(f'{model_id} Training Time')
+                ax2.grid(True, alpha=0.3)
+                ax2.legend()
+            else:
+                # Loss smoothing plot if no time data
+                if len(df) > 5:
+                    window_size = min(5, len(df) // 3)
+                    smoothed_loss = df['loss'].rolling(window=window_size, center=True).mean()
+                    ax2.plot(df['epoch'], df['loss'], 'b-', alpha=0.3, label='Raw Loss')
+                    ax2.plot(df['epoch'], smoothed_loss, 'b-', linewidth=2, label=f'Smoothed (window={window_size})')
+                    ax2.set_xlabel('Epoch')
+                    ax2.set_ylabel('Training Loss')
+                    ax2.set_title(f'{model_id} Loss Smoothing')
+                    ax2.grid(True, alpha=0.3)
+                    ax2.legend()
+                else:
+                    ax2.text(0.5, 0.5, 'Not enough data\nfor smoothing', 
+                            ha='center', va='center', transform=ax2.transAxes)
+                    ax2.set_title(f'{model_id} Training Summary')
+            
+            plt.tight_layout()
+            
+            # Save plot
+            plot_path = os.path.join(model_dir, "training_curve.png")
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            print(f"⚠️ Failed to create training curve for {model_id}: {e}")
     
     def load_model(self, model_id: str) -> Optional[torch.nn.Module]:
         """

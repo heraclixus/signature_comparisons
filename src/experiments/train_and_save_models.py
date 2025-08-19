@@ -155,7 +155,17 @@ class ModelTrainer:
                 best_epoch = epoch + 1
                 patience_counter = 0
                 
-                # Save best model
+                # Save best model with training history
+                current_history = {
+                    'model_id': model_id,
+                    'losses': training_losses.copy(),
+                    'times': epoch_times.copy(),
+                    'best_loss': best_loss,
+                    'best_epoch': best_epoch,
+                    'total_time': time.time() - start_time,
+                    'epochs_trained': epoch + 1
+                }
+                
                 self.checkpoint_manager.save_model(
                     model=model,
                     model_id=model_id,
@@ -166,7 +176,8 @@ class ModelTrainer:
                         'learning_rate': optimizer.param_groups[0]['lr'],
                         'total_epochs': num_epochs,
                         'best_epoch': epoch + 1
-                    }
+                    },
+                    training_history=current_history
                 )
                 print(f"  💾 New best model saved at epoch {epoch + 1}: {epoch_loss:.6f}")
             else:
@@ -556,6 +567,11 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
     best_loss = float('inf')
     best_epoch = 0
     
+    # Track training history
+    training_losses = []
+    epoch_times = []
+    start_time = time.time()
+    
     # Very small batch training for memory efficiency
     mini_batch_size = 4
     accumulation_steps = 8
@@ -611,21 +627,37 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
         if num_batches > 0:
             epoch_loss = accumulated_loss / num_batches
         
-        # Save best model
+        # Track training history
+        epoch_time = time.time() - epoch_start
+        training_losses.append(epoch_loss)
+        epoch_times.append(epoch_time)
+        
+        # Save best model with training history
         if epoch_loss < best_loss:
             best_loss = epoch_loss
             best_epoch = epoch + 1
+            
+            # Create current training history
+            current_history = {
+                'model_id': model_id,
+                'losses': training_losses.copy(),
+                'times': epoch_times.copy(),
+                'best_loss': best_loss,
+                'best_epoch': best_epoch,
+                'total_time': time.time() - start_time,
+                'epochs_trained': epoch + 1
+            }
             
             checkpoint_manager.save_model(
                 model=model,
                 model_id=model_id,
                 epoch=epoch + 1,
                 loss=epoch_loss,
-                metrics={}
+                metrics={},
+                training_history=current_history
             )
         
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            epoch_time = time.time() - epoch_start
             print(f"  Epoch {epoch + 1:2d}: Loss = {epoch_loss:.6f}, Best = {best_loss:.6f} (epoch {best_epoch}), Time = {epoch_time:.2f}s")
     
     return True, best_loss, best_epoch
@@ -633,15 +665,47 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
 
 def train_model_standard(model, model_id: str, checkpoint_manager, train_data: torch.Tensor, epochs: int, lr: float):
     """Standard training for regular models."""
-    trainer = ModelTrainer(model, checkpoint_manager, model_id)
+    import torch.utils.data as torchdata
+    
+    # Create data loader
+    batch_size = 32 if model_id.startswith('A') else 16
+    dataset = torchdata.TensorDataset(train_data, torch.zeros(train_data.shape[0]))  # dummy labels
+    train_loader = torchdata.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    
+    # Create optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    trainer = ModelTrainer(checkpoint_manager)
     
     try:
         history = trainer.train_with_checkpointing(
-            train_data, epochs=epochs, lr=lr, batch_size=32 if model_id.startswith('A') else 16
+            model, model_id, train_loader, optimizer, epochs
         )
         
         best_loss = min(history['losses'])
         best_epoch = history['losses'].index(best_loss) + 1
+        
+        # Save final training history if not already saved
+        final_history = {
+            'model_id': model_id,
+            'losses': history['losses'],
+            'times': history.get('times', []),
+            'best_loss': best_loss,
+            'best_epoch': best_epoch,
+            'final_loss': history.get('final_loss', best_loss),
+            'total_time': history.get('total_time', 0),
+            'epochs_trained': len(history['losses'])
+        }
+        
+        # Save final model with complete history
+        checkpoint_manager.save_model(
+            model=model,
+            model_id=model_id,
+            epoch=best_epoch,
+            loss=best_loss,
+            metrics={},
+            training_history=final_history
+        )
         
         return True, best_loss, best_epoch
         
