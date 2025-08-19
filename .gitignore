@@ -1,0 +1,15 @@
+results/
+notebooks/
+data/
+signatures/__pycache__/
+signatures/src/__pycache__/
+signatures/src/utils/__pycache__/
+signatures/src/utils/helper_functions/__pycache__/
+signatures/src/utils/helper_functions/data_helper_functions/__pycache__/
+signatures/src/utils/helper_functions/plot_helper_functions/__pycache__/
+signatures/src/utils/helper_functions/global_helper_functions/__pycache__/
+signatures/src/utils/helper_functions/global_helper_functions/data_helper_functions/__pycache__/
+signatures/src/utils/helper_functions/global_helper_functions/plot_helper_functions/__pycache__/
+signatures/src/utils/helper_functions/global_helper_functions/global_helper_functions/__pycache__/
+signatures/sigkernel/
+models/__pycache__
