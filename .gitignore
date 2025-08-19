@@ -10,6 +10,13 @@ __pycache__/
 # Training results and models
 results/*/trained_models/
 
+# Generated evaluation CSV files
+results/*/evaluation/*.csv
+results/*/training/*.csv
+results/cross_dataset_analysis/*.csv
+results/adversarial_comparison/*.csv
+results/runtime_analysis/*.csv
+
 # Data and notebooks
 notebooks/
 data/
