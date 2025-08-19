@@ -48,7 +48,7 @@ class TrainingLogger:
         return self.history.copy()
 
 
-def train_model(model, train_loader, optimizer, num_epochs: int = 50, 
+def train_model(model, train_loader, optimizer, num_epochs: int = 100, 
                 model_name: str = "Model") -> TrainingLogger:
     """
     Train a model and return training history.

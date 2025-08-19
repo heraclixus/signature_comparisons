@@ -399,7 +399,7 @@ def run_training_experiment():
     a2_optimizer = optim.Adam(a2_model.parameters(), lr=lr)
     
     # Training
-    num_epochs = 80
+    num_epochs = 100
     print(f"\nStarting training ({num_epochs} epochs, lr={lr})...")
     
     a1_history = train_model_simple(a1_model, train_loader, a1_optimizer, num_epochs, "A1")

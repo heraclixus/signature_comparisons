@@ -436,7 +436,7 @@ def run_comprehensive_training_experiment():
     a3_optimizer = optim.Adam(a3_model.parameters(), lr=lr)
     
     # Training
-    num_epochs = 80
+    num_epochs = 100
     print(f"\nStarting training ({num_epochs} epochs, lr={lr})...")
     
     training_histories = {}

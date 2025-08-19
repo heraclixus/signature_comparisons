@@ -216,7 +216,7 @@ class SigKernelScoringLoss:
                 return scoring_loss.float()
             else:
                 # Process in very small chunks
-                total_loss = 0.0
+                chunk_losses = []
                 num_chunks = (batch_size + chunk_size - 1) // chunk_size
                 
                 # Use same reference for all chunks
@@ -235,9 +235,11 @@ class SigKernelScoringLoss:
                         torch.cuda.empty_cache()
                     
                     chunk_loss = self.sig_kernel.compute_scoring_rule(chunk_gen, y_short, max_batch=chunk_size)
-                    total_loss += chunk_loss.item()
+                    chunk_losses.append(chunk_loss)
                 
-                return torch.tensor(total_loss / num_chunks, dtype=torch.float32)
+                # Sum all chunk losses while maintaining gradients
+                total_loss = torch.stack(chunk_losses).sum()
+                return total_loss / num_chunks
             
         except Exception as e:
             warnings.warn(f"Sigkernel scoring computation failed: {e}. Using simplified fallback.")
@@ -253,6 +255,11 @@ class SigKernelScoringLoss:
         
         gen_sigs = sig_transform(generated_paths)
         real_sigs = sig_transform(real_paths)
+        
+        # Ensure compatible batch sizes for RBF kernel
+        batch_size = min(gen_sigs.shape[0], real_sigs.shape[0])
+        gen_sigs = gen_sigs[:batch_size]
+        real_sigs = real_sigs[:batch_size]
         
         # RBF kernel similarities
         similarities = self._rbf_kernel(gen_sigs, real_sigs)

@@ -93,7 +93,7 @@ class ModelTrainer:
     
     def train_with_checkpointing(self, model, model_id: str, train_loader, 
                                optimizer, num_epochs: int, 
-                               save_every: int = 20, patience: int = 20):
+                               save_every: int = 20, patience: int = 10):
         """
         Train model with automatic checkpointing of best models.
         
@@ -242,11 +242,13 @@ def setup_training_data(n_samples: int = 256, n_points: int = 100, batch_size: i
 
 
 def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, dataset_name: str = 'ou_process', 
-                          memory_optimized: bool = False):
+                          memory_optimized: bool = False, retrain_all: bool = False):
     """Train all available models and save checkpoints."""
     print(f"Training Available Models with Checkpointing on {dataset_name.upper()}")
     if memory_optimized:
         print("🧠 Memory optimization enabled for B-type models")
+    if retrain_all:
+        print("🔄 Retrain all mode: Ignoring existing checkpoints")
     print("=" * 60)
     
     # Setup checkpoint manager for specific dataset
@@ -265,65 +267,83 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
     
     # Check A1
     if A1_AVAILABLE:
-        if checkpoint_manager.model_exists("A1"):
+        if not retrain_all and checkpoint_manager.model_exists("A1"):
             print(f"⏭️ A1 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("A1"):
+                print(f"🔄 A1 exists but retraining due to --retrain-all flag")
             models_to_train.append(("A1", create_a1_final_model, "T-Statistic"))
     
     # Check A2
     if A2_AVAILABLE:
-        if checkpoint_manager.model_exists("A2"):
+        if not retrain_all and checkpoint_manager.model_exists("A2"):
             print(f"⏭️ A2 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("A2"):
+                print(f"🔄 A2 exists but retraining due to --retrain-all flag")
             models_to_train.append(("A2", create_a2_model, "Signature Scoring"))
     
     # Check A3
     if A3_AVAILABLE:
-        if checkpoint_manager.model_exists("A3"):
+        if not retrain_all and checkpoint_manager.model_exists("A3"):
             print(f"⏭️ A3 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("A3"):
+                print(f"🔄 A3 exists but retraining due to --retrain-all flag")
             models_to_train.append(("A3", create_a3_model, "MMD"))
     
     # Check B4
     if B4_AVAILABLE:
-        if checkpoint_manager.model_exists("B4"):
+        if not retrain_all and checkpoint_manager.model_exists("B4"):
             print(f"⏭️ B4 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("B4"):
+                print(f"🔄 B4 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B4", create_b4_model, "Neural SDE + MMD"))
     
     # Check B5
     if B5_AVAILABLE:
-        if checkpoint_manager.model_exists("B5"):
+        if not retrain_all and checkpoint_manager.model_exists("B5"):
             print(f"⏭️ B5 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("B5"):
+                print(f"🔄 B5 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B5", create_b5_model, "Neural SDE + Signature Scoring"))
     
     # Check A4
     if A4_AVAILABLE:
-        if checkpoint_manager.model_exists("A4"):
+        if not retrain_all and checkpoint_manager.model_exists("A4"):
             print(f"⏭️ A4 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("A4"):
+                print(f"🔄 A4 exists but retraining due to --retrain-all flag")
             models_to_train.append(("A4", create_a4_model, "CannedNet + T-Statistic + Log Signatures"))
     
     # Check B3
     if B3_AVAILABLE:
-        if checkpoint_manager.model_exists("B3"):
+        if not retrain_all and checkpoint_manager.model_exists("B3"):
             print(f"⏭️ B3 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("B3"):
+                print(f"🔄 B3 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B3", create_b3_model, "Neural SDE + T-Statistic"))
     
     # Check B1
     if B1_AVAILABLE:
-        if checkpoint_manager.model_exists("B1"):
+        if not retrain_all and checkpoint_manager.model_exists("B1"):
             print(f"⏭️ B1 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("B1"):
+                print(f"🔄 B1 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B1", create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved"))
     
     # Check B2
     if B2_AVAILABLE:
-        if checkpoint_manager.model_exists("B2"):
+        if not retrain_all and checkpoint_manager.model_exists("B2"):
             print(f"⏭️ B2 already trained, skipping...")
         else:
+            if retrain_all and checkpoint_manager.model_exists("B2"):
+                print(f"🔄 B2 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved"))
     
     # C1-C3 models removed - not truly generative
@@ -382,7 +402,7 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                     optimizer=optimizer,
                     num_epochs=num_epochs,
                     save_every=25,
-                    patience=30
+                    patience=10
                 )
             
             training_results[model_id] = history
@@ -406,7 +426,9 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
             })
         
         summary_df = pd.DataFrame(summary_data)
-        summary_path = "results/training/training_summary.csv"
+        summary_dir = f'results/{dataset_name}/training'
+        os.makedirs(summary_dir, exist_ok=True)
+        summary_path = os.path.join(summary_dir, f'{dataset_name}_training_summary.csv')
         summary_df.to_csv(summary_path, index=False)
         
         print(f"\n" + "="*60)
@@ -439,7 +461,7 @@ def force_retrain_model(model_id: str, num_epochs: int = 100):
     train_available_models(num_epochs)
 
 
-def train_all_datasets(epochs: int = 30, lr: float = 0.001, memory_optimized: bool = False):
+def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: bool = False, retrain_all: bool = False):
     """Train all models on all datasets."""
     print("🚀 Multi-Dataset Training Pipeline")
     if memory_optimized:
@@ -468,18 +490,20 @@ def train_all_datasets(epochs: int = 30, lr: float = 0.001, memory_optimized: bo
         
         if dataset_name == 'ou_process':
             # Use existing OU training function
-            train_available_models(epochs, lr, dataset_name='ou_process', memory_optimized=memory_optimized)
+            train_available_models(epochs, lr, dataset_name='ou_process', memory_optimized=memory_optimized, retrain_all=retrain_all)
         else:
             # Train on new dataset
-            train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr, memory_optimized=memory_optimized)
+            train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr, memory_optimized=memory_optimized, retrain_all=retrain_all)
 
 
-def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 30, lr: float = 0.001, 
-                                     memory_optimized: bool = False):
+def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 100, lr: float = 0.001, 
+                                     memory_optimized: bool = False, retrain_all: bool = False):
     """Train all available models on a specific dataset."""
     print(f"Training Available Models on {dataset_name.upper()} Dataset")
     if memory_optimized:
         print("🧠 Memory optimization enabled for B-type models")
+    if retrain_all:
+        print("🔄 Retrain all mode: Ignoring existing checkpoints")
     print("=" * 60)
     
     # Setup training data
@@ -516,9 +540,11 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
     
     for model_id, create_fn, description, available in model_configs:
         if available:
-            if checkpoint_manager.model_exists(model_id):
+            if not retrain_all and checkpoint_manager.model_exists(model_id):
                 print(f"⏭️ {model_id} already trained on {dataset_name}, skipping...")
             else:
+                if retrain_all and checkpoint_manager.model_exists(model_id):
+                    print(f"🔄 {model_id} exists on {dataset_name} but retraining due to --retrain-all flag")
                 models_to_train.append((model_id, create_fn, description))
     
     if not models_to_train:
@@ -594,6 +620,8 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
     
     best_loss = float('inf')
     best_epoch = 0
+    patience_counter = 0
+    patience = 10
     
     # Track training history
     training_losses = []
@@ -664,6 +692,7 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
         if epoch_loss < best_loss:
             best_loss = epoch_loss
             best_epoch = epoch + 1
+            patience_counter = 0
             
             # Create current training history
             current_history = {
@@ -684,9 +713,16 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
                 metrics={},
                 training_history=current_history
             )
+        else:
+            patience_counter += 1
         
         if (epoch + 1) % 5 == 0 or epoch == 0:
             print(f"  Epoch {epoch + 1:2d}: Loss = {epoch_loss:.6f}, Best = {best_loss:.6f} (epoch {best_epoch}), Time = {epoch_time:.2f}s")
+        
+        # Early stopping
+        if patience_counter >= patience:
+            print(f"  🛑 Early stopping at epoch {epoch + 1} (patience: {patience})")
+            break
     
     return True, best_loss, best_epoch
 
@@ -747,9 +783,10 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Train and save signature-based models")
-    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--force", type=str, help="Force retrain specific model")
+    parser.add_argument("--retrain-all", action="store_true", help="Force retrain all models (ignores existing checkpoints)")
     parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
     parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
@@ -772,6 +809,19 @@ def main():
             force_retrain_model_on_dataset(args.force, args.dataset, args.epochs, args.memory_opt)
         else:
             force_retrain_model(args.force, args.epochs)
+    elif args.retrain_all:
+        # Retrain all models (ignoring existing checkpoints)
+        if args.dataset:
+            # Retrain all models on specific dataset
+            if args.dataset == 'ou_process':
+                train_available_models(args.epochs, args.lr, dataset_name='ou_process', memory_optimized=args.memory_opt, retrain_all=True)
+            else:
+                dataset_manager = MultiDatasetManager()
+                dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=256)
+                train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr, memory_optimized=args.memory_opt, retrain_all=True)
+        else:
+            # Retrain all models on all datasets
+            train_all_datasets(args.epochs, args.lr, args.memory_opt, retrain_all=True)
     elif args.dataset:
         # Train on specific dataset
         if args.dataset == 'ou_process':
