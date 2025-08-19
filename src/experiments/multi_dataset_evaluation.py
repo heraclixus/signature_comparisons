@@ -175,9 +175,12 @@ def create_comprehensive_visualizations(rankings_df: pd.DataFrame, overall_df: p
     datasets = rankings_df['dataset'].unique()
     models = overall_df['model_id'].tolist()
     
-    # Create two completely separate plots for better clarity
+    # Create main ranking plots
     create_distributional_ranking_plot(overall_df, save_dir)
     create_rmse_ranking_plot(overall_df, save_dir)
+    
+    # Create rough vs non-rough analysis
+    create_rough_vs_nonrough_analysis(rankings_df, save_dir)
     
     print(f"✅ Comprehensive analysis saved to: {save_dir}/")
 
@@ -280,6 +283,206 @@ def create_rmse_ranking_plot(overall_df: pd.DataFrame, save_dir: str):
     plt.savefig(os.path.join(save_dir, 'rmse_accuracy_ranking.png'), 
                 dpi=300, bbox_inches='tight')
     print(f"   ✅ RMSE ranking saved to: rmse_accuracy_ranking.png")
+
+
+def create_rough_vs_nonrough_analysis(rankings_df: pd.DataFrame, save_dir: str):
+    """Create analysis comparing model performance on rough vs non-rough datasets."""
+    print("   🌊 Creating rough vs non-rough dataset analysis...")
+    
+    # Define rough vs non-rough datasets
+    rough_datasets = ['rbergomi', 'fbm_h03', 'fbm_h04']  # H < 0.5 or inherently rough
+    nonrough_datasets = ['ou_process', 'heston', 'brownian', 'fbm_h06', 'fbm_h07']  # H >= 0.5 or smooth
+    
+    # Filter data for each category
+    rough_data = rankings_df[rankings_df['dataset'].isin(rough_datasets)]
+    nonrough_data = rankings_df[rankings_df['dataset'].isin(nonrough_datasets)]
+    
+    if rough_data.empty or nonrough_data.empty:
+        print("   ⚠️ Insufficient data for rough vs non-rough analysis")
+        return
+    
+    # Compute average rankings for each category
+    rough_rankings = compute_category_rankings(rough_data, "Rough Processes")
+    nonrough_rankings = compute_category_rankings(nonrough_data, "Non-Rough Processes")
+    
+    # Create comparison visualizations
+    create_rough_nonrough_comparison_plots(rough_rankings, nonrough_rankings, save_dir)
+    
+    # Save detailed results
+    rough_rankings.to_csv(os.path.join(save_dir, 'rough_datasets_rankings.csv'), index=False)
+    nonrough_rankings.to_csv(os.path.join(save_dir, 'nonrough_datasets_rankings.csv'), index=False)
+    
+    print(f"   ✅ Rough vs non-rough analysis saved")
+
+
+def compute_category_rankings(data: pd.DataFrame, category_name: str) -> pd.DataFrame:
+    """Compute average rankings for a category of datasets."""
+    # Group by model and compute average metrics
+    model_stats = data.groupby('model_id').agg({
+        'weighted_average_rank': 'mean',
+        'ks_statistic': 'mean',
+        'wasserstein_distance': 'mean',
+        'rmse': 'mean',
+        'std_rmse': 'mean',
+        'dataset': 'count'  # Count how many datasets each model was evaluated on
+    }).reset_index()
+    
+    # Rename count column
+    model_stats.rename(columns={'dataset': 'num_datasets'}, inplace=True)
+    
+    # Compute distributional score (lower is better)
+    model_stats['distributional_score'] = (model_stats['ks_statistic'] + model_stats['wasserstein_distance']) / 2
+    
+    # Sort by weighted average rank
+    model_stats = model_stats.sort_values('weighted_average_rank').reset_index(drop=True)
+    model_stats['category_rank'] = range(1, len(model_stats) + 1)
+    model_stats['category'] = category_name
+    
+    return model_stats
+
+
+def create_rough_nonrough_comparison_plots(rough_rankings: pd.DataFrame, nonrough_rankings: pd.DataFrame, save_dir: str):
+    """Create comparison plots for rough vs non-rough dataset performance."""
+    print("   🎨 Creating rough vs non-rough comparison plots...")
+    
+    # Create figure with 2x2 layout
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Model Performance: Rough vs Non-Rough Stochastic Processes', 
+                 fontsize=18, fontweight='bold', y=0.98)
+    
+    # 1. Distributional Quality on Rough Processes
+    ax1 = axes[0, 0]
+    create_category_ranking_plot(ax1, rough_rankings, 'distributional_score', 
+                                'Rough Processes: Distributional Quality',
+                                'Distributional Score (Lower = Better)', 'Reds_r')
+    
+    # 2. Distributional Quality on Non-Rough Processes  
+    ax2 = axes[0, 1]
+    create_category_ranking_plot(ax2, nonrough_rankings, 'distributional_score',
+                                'Non-Rough Processes: Distributional Quality', 
+                                'Distributional Score (Lower = Better)', 'Blues_r')
+    
+    # 3. RMSE on Rough Processes
+    ax3 = axes[1, 0]
+    create_category_ranking_plot(ax3, rough_rankings, 'rmse',
+                                'Rough Processes: RMSE Accuracy',
+                                'RMSE (Lower = Better)', 'Oranges_r')
+    
+    # 4. RMSE on Non-Rough Processes
+    ax4 = axes[1, 1]
+    create_category_ranking_plot(ax4, nonrough_rankings, 'rmse',
+                                'Non-Rough Processes: RMSE Accuracy',
+                                'RMSE (Lower = Better)', 'Greens_r')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, 'rough_vs_nonrough_analysis.png'), 
+                dpi=300, bbox_inches='tight')
+    print(f"   ✅ Rough vs non-rough comparison saved to: rough_vs_nonrough_analysis.png")
+    
+    # Create side-by-side ranking comparison
+    create_side_by_side_ranking_comparison(rough_rankings, nonrough_rankings, save_dir)
+
+
+def create_category_ranking_plot(ax, rankings_df: pd.DataFrame, metric: str, title: str, ylabel: str, colormap: str):
+    """Create a ranking plot for a specific category and metric."""
+    models = rankings_df['model_id'].tolist()
+    values = rankings_df[metric].tolist()
+    
+    # Create gradient colors
+    colors = plt.colormaps[colormap](np.linspace(0.3, 0.9, len(models)))
+    
+    bars = ax.bar(range(len(models)), values, color=colors, alpha=0.8, 
+                  edgecolor='black', linewidth=1)
+    
+    ax.set_title(title, fontweight='bold', fontsize=12, pad=15)
+    ax.set_ylabel(ylabel, fontsize=10)
+    ax.set_xticks(range(len(models)))
+    ax.set_xticklabels(models, rotation=45, ha='right', fontsize=10)
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels and rank numbers
+    max_val = max(values)
+    for i, (bar, value) in enumerate(zip(bars, values)):
+        # Value above bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_val * 0.02,
+                f'{value:.3f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+        # Rank number inside bar
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 0.5,
+                f'#{i+1}', ha='center', va='center', fontsize=11, fontweight='bold', color='white')
+
+
+def create_side_by_side_ranking_comparison(rough_rankings: pd.DataFrame, nonrough_rankings: pd.DataFrame, save_dir: str):
+    """Create side-by-side comparison of model rankings on rough vs non-rough datasets."""
+    print("   📊 Creating side-by-side ranking comparison...")
+    
+    # Find models that appear in both categories
+    rough_models = set(rough_rankings['model_id'])
+    nonrough_models = set(nonrough_rankings['model_id'])
+    common_models = rough_models.intersection(nonrough_models)
+    
+    if not common_models:
+        print("   ⚠️ No common models found for side-by-side comparison")
+        return
+    
+    common_models = sorted(common_models)
+    
+    # Create figure with single plot for clarity
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+    
+    # Focus on distributional quality (most important for stochastic processes)
+    create_paired_category_plot(ax, rough_rankings, nonrough_rankings, common_models, 
+                               'distributional_score', 'Rough vs Non-Rough Process Performance',
+                               'Distributional Score (Lower = Better)')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, 'rough_vs_nonrough_side_by_side.png'),
+                dpi=300, bbox_inches='tight')
+    print(f"   ✅ Side-by-side comparison saved to: rough_vs_nonrough_side_by_side.png")
+
+
+def create_paired_category_plot(ax, rough_df: pd.DataFrame, nonrough_df: pd.DataFrame, 
+                               models: list, metric: str, title: str, ylabel: str):
+    """Create paired bar plot comparing rough vs non-rough performance."""
+    rough_values = []
+    nonrough_values = []
+    
+    for model in models:
+        rough_val = rough_df[rough_df['model_id'] == model][metric].iloc[0]
+        nonrough_val = nonrough_df[nonrough_df['model_id'] == model][metric].iloc[0]
+        rough_values.append(rough_val)
+        nonrough_values.append(nonrough_val)
+    
+    x = np.arange(len(models))
+    width = 0.35
+    
+    # Calculate max value for layout
+    all_values = rough_values + nonrough_values
+    max_val = max(all_values)
+    
+    bars1 = ax.bar(x - width/2, rough_values, width, label='Rough Processes', 
+                   color='coral', alpha=0.8, edgecolor='darkred')
+    bars2 = ax.bar(x + width/2, nonrough_values, width, label='Non-Rough Processes',
+                   color='skyblue', alpha=0.8, edgecolor='darkblue')
+    
+    ax.set_title(title, fontweight='bold', fontsize=14, pad=20)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_xticks(x)
+    ax.set_xticklabels(models, rotation=45, ha='right', fontsize=11)
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Extend y-axis to provide space for labels
+    ax.set_ylim(0, max_val * 1.15)
+    
+    # Add value labels with better positioning and formatting
+    
+    for bars, values, color in [(bars1, rough_values, 'darkred'), (bars2, nonrough_values, 'darkblue')]:
+        for bar, value in zip(bars, values):
+            # Position label above bar with more spacing
+            ax.text(bar.get_x() + bar.get_width()/2, 
+                   bar.get_height() + max_val * 0.05,  # Increased spacing
+                   f'{value:.3f}', ha='center', va='bottom', 
+                   fontsize=10, fontweight='bold', color=color)  # Larger, bolder, colored text
 
 
 def run_cross_dataset_analysis():

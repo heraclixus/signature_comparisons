@@ -94,7 +94,11 @@ After evaluation, you'll find:
 #### Cross-Dataset Analysis
 - `results/cross_dataset_analysis/distributional_quality_ranking.png` - Clean distributional ranking
 - `results/cross_dataset_analysis/rmse_accuracy_ranking.png` - Clean RMSE ranking
+- `results/cross_dataset_analysis/rough_vs_nonrough_analysis.png` - ✨ **NEW** Rough vs non-rough process analysis
+- `results/cross_dataset_analysis/rough_vs_nonrough_side_by_side.png` - ✨ **NEW** Side-by-side rough vs non-rough comparison
 - `results/cross_dataset_analysis/overall_model_summary.csv` - Complete performance data
+- `results/cross_dataset_analysis/rough_datasets_rankings.csv` - ✨ **NEW** Rankings on rough processes only
+- `results/cross_dataset_analysis/nonrough_datasets_rankings.csv` - ✨ **NEW** Rankings on non-rough processes only
 
 #### Adversarial vs Non-Adversarial Comparison  
 - `results/adversarial_comparison/adversarial_vs_non_adversarial_comparison.png` - Side-by-side comparison
@@ -125,6 +129,14 @@ Our evaluation system generates clean, publication-ready visualizations:
 ![Trajectory Visualization](results/ou_process/evaluation/ultra_clear_trajectory_visualization.png)
 *Generated trajectories vs ground truth for OU Process dataset (20 samples per model)*
 
+#### Rough vs Non-Rough Process Analysis
+![Rough vs Non-Rough Analysis](results/cross_dataset_analysis/rough_vs_nonrough_analysis.png)
+*Model performance comparison on rough processes (rBergomi, FBM H<0.5) vs non-rough processes (OU, Heston, Brownian, FBM H≥0.5)*
+
+#### Side-by-Side Rough vs Non-Rough Comparison
+![Rough vs Non-Rough Side by Side](results/cross_dataset_analysis/rough_vs_nonrough_side_by_side.png)
+*Clean comparison of distributional quality (KS + Wasserstein) on rough vs non-rough stochastic processes*
+
 ### Evaluation Coverage
 - **15 models** evaluated (9 non-adversarial + 6 adversarial)
 - **8 stochastic processes** tested
@@ -133,14 +145,19 @@ Our evaluation system generates clean, publication-ready visualizations:
 
 ## 📋 Supported Datasets
 
-- **ou_process** - Ornstein-Uhlenbeck (mean-reverting)
-- **heston** - Heston stochastic volatility
-- **rbergomi** - Rough Bergomi volatility  
-- **brownian** - Standard Brownian motion
+### 🌊 Rough Processes (H < 0.5 or inherently rough)
+- **rbergomi** - Rough Bergomi volatility model
 - **fbm_h03** - Fractional Brownian Motion (H=0.3, anti-persistent)
 - **fbm_h04** - Fractional Brownian Motion (H=0.4, anti-persistent)
+
+### 🏔️ Non-Rough Processes (H ≥ 0.5 or smooth)
+- **ou_process** - Ornstein-Uhlenbeck (mean-reverting)
+- **heston** - Heston stochastic volatility
+- **brownian** - Standard Brownian motion (H=0.5, neutral)
 - **fbm_h06** - Fractional Brownian Motion (H=0.6, persistent)
 - **fbm_h07** - Fractional Brownian Motion (H=0.7, persistent)
+
+*Rough processes exhibit anti-persistence and irregular/jagged paths, while non-rough processes have smoother, more predictable behavior.*
 
 ## 🎯 Model Recommendations
 
