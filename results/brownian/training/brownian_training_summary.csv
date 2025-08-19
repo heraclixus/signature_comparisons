@@ -1,6 +1,2 @@
 dataset,model_id,best_loss,best_epoch,total_epochs
-brownian,A1,-1.2704465836286545,5,5
-brownian,A4,-1.2379269003868103,5,5
-brownian,B1,-2.121398715302348,5,5
-brownian,B2,-0.15563892816135194,4,5
-brownian,B5,0.48109748028218746,5,5
+brownian,B5,0.8108180090785027,1,1

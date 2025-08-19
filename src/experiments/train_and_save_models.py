@@ -241,9 +241,12 @@ def setup_training_data(n_samples: int = 256, n_points: int = 100, batch_size: i
     return train_loader, example_batch, signals
 
 
-def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, dataset_name: str = 'ou_process'):
+def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, dataset_name: str = 'ou_process', 
+                          memory_optimized: bool = False):
     """Train all available models and save checkpoints."""
     print(f"Training Available Models with Checkpointing on {dataset_name.upper()}")
+    if memory_optimized:
+        print("🧠 Memory optimization enabled for B-type models")
     print("=" * 60)
     
     # Setup checkpoint manager for specific dataset
@@ -352,16 +355,35 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
             # Setup optimizer
             optimizer = optim.Adam(model.parameters(), lr=learning_rate)
             
-            # Train with checkpointing
-            history = trainer.train_with_checkpointing(
-                model=model,
-                model_id=model_id,
-                train_loader=train_loader,
-                optimizer=optimizer,
-                num_epochs=num_epochs,
-                save_every=25,
-                patience=30
-            )
+            # Choose training method based on model type and memory optimization flag
+            if memory_optimized and model_id.startswith('B'):
+                print(f"  🧠 Using memory-optimized training for {model_id}")
+                # Convert to tensor data for memory-optimized training
+                train_data = torch.stack([signals[i] for i in range(min(256, len(signals)))])
+                success, best_loss, best_epoch = train_model_memory_optimized(
+                    model, model_id, checkpoint_manager, train_data, num_epochs
+                )
+                # Create history object for consistency
+                history = {
+                    'model_id': model_id,
+                    'losses': [best_loss],  # Simplified history
+                    'best_loss': best_loss,
+                    'best_epoch': best_epoch,
+                    'final_loss': best_loss,
+                    'total_time': 0,
+                    'epochs_trained': best_epoch
+                }
+            else:
+                # Standard training with checkpointing
+                history = trainer.train_with_checkpointing(
+                    model=model,
+                    model_id=model_id,
+                    train_loader=train_loader,
+                    optimizer=optimizer,
+                    num_epochs=num_epochs,
+                    save_every=25,
+                    patience=30
+                )
             
             training_results[model_id] = history
             
@@ -417,9 +439,11 @@ def force_retrain_model(model_id: str, num_epochs: int = 100):
     train_available_models(num_epochs)
 
 
-def train_all_datasets(epochs: int = 30, lr: float = 0.001):
+def train_all_datasets(epochs: int = 30, lr: float = 0.001, memory_optimized: bool = False):
     """Train all models on all datasets."""
     print("🚀 Multi-Dataset Training Pipeline")
+    if memory_optimized:
+        print("🧠 Memory optimization enabled for B-type models")
     print("=" * 70)
     
     # Initialize dataset manager
@@ -444,15 +468,18 @@ def train_all_datasets(epochs: int = 30, lr: float = 0.001):
         
         if dataset_name == 'ou_process':
             # Use existing OU training function
-            train_available_models(epochs, lr, dataset_name='ou_process')
+            train_available_models(epochs, lr, dataset_name='ou_process', memory_optimized=memory_optimized)
         else:
             # Train on new dataset
-            train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr)
+            train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr, memory_optimized=memory_optimized)
 
 
-def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 30, lr: float = 0.001):
+def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 30, lr: float = 0.001, 
+                                     memory_optimized: bool = False):
     """Train all available models on a specific dataset."""
     print(f"Training Available Models on {dataset_name.upper()} Dataset")
+    if memory_optimized:
+        print("🧠 Memory optimization enabled for B-type models")
     print("=" * 60)
     
     # Setup training data
@@ -515,8 +542,9 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
             model = create_model_fn(train_data, train_data)
             print(f"Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
             
-            # Use memory-optimized training for sigkernel models
-            if model_id in ['B1', 'B2']:
+            # Choose training method based on model type and memory optimization flag
+            if memory_optimized and model_id.startswith('B'):
+                print(f"  🧠 Using memory-optimized training for {model_id}")
                 success, best_loss, best_epoch = train_model_memory_optimized(
                     model, model_id, checkpoint_manager, train_data, epochs
                 )
@@ -724,6 +752,7 @@ def main():
     parser.add_argument("--force", type=str, help="Force retrain specific model")
     parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
+    parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
     
     args = parser.parse_args()
     
@@ -740,25 +769,27 @@ def main():
     if args.force:
         # Force retrain on specific dataset or all datasets
         if args.dataset:
-            force_retrain_model_on_dataset(args.force, args.dataset, args.epochs)
+            force_retrain_model_on_dataset(args.force, args.dataset, args.epochs, args.memory_opt)
         else:
             force_retrain_model(args.force, args.epochs)
     elif args.dataset:
         # Train on specific dataset
         if args.dataset == 'ou_process':
-            train_available_models(args.epochs, args.lr)
+            train_available_models(args.epochs, args.lr, memory_optimized=args.memory_opt)
         else:
             dataset_manager = MultiDatasetManager()
             dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=256)
-            train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr)
+            train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr, memory_optimized=args.memory_opt)
     else:
         # Train on all datasets (default behavior)
-        train_all_datasets(args.epochs, args.lr)
+        train_all_datasets(args.epochs, args.lr, args.memory_opt)
 
 
-def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int):
+def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int, memory_optimized: bool = False):
     """Force retrain a model on a specific dataset."""
     print(f"Force Retraining {model_id} on {dataset_name}")
+    if memory_optimized:
+        print("🧠 Memory optimization enabled for B-type models")
     print("=" * 50)
     
     checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
@@ -769,11 +800,11 @@ def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int
     
     # Train on specific dataset
     if dataset_name == 'ou_process':
-        train_available_models(epochs, dataset_name='ou_process')
+        train_available_models(epochs, dataset_name='ou_process', memory_optimized=memory_optimized)
     else:
         dataset_manager = MultiDatasetManager()
         dataset_data = dataset_manager.get_dataset(dataset_name, num_samples=256)
-        train_available_models_on_dataset(dataset_name, dataset_data, epochs)
+        train_available_models_on_dataset(dataset_name, dataset_data, epochs, memory_optimized=memory_optimized)
 
 
 if __name__ == "__main__":

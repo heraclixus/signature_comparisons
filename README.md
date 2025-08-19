@@ -176,6 +176,9 @@ python src/experiments/train_and_save_models.py --dataset ou_process --epochs 30
 # Force retrain specific model on specific dataset
 python src/experiments/train_and_save_models.py --force B3 --dataset heston --epochs 30
 
+# Enable memory optimization for B-type models (slower but uses less memory)
+python src/experiments/train_and_save_models.py --dataset brownian --epochs 30 --memory-opt
+
 # List available trained models across all datasets
 python src/experiments/train_and_save_models.py --list
 ```
@@ -183,8 +186,14 @@ python src/experiments/train_and_save_models.py --list
 **🎯 Smart Training Logic:**
 - **Automatic detection**: Only trains models that don't have existing checkpoints
 - **Multi-dataset support**: Trains on OU Process, Heston, rBergomi, and Brownian Motion
-- **Memory optimization**: Automatically uses optimized training for memory-intensive models (B1, B2)
+- **Optional memory optimization**: Use `--memory-opt` flag for B-type models when memory is constrained
 - **Skip logic**: Efficiently skips already-trained models to avoid redundant computation
+
+**🧠 Memory Optimization Options:**
+- **Default (Fast)**: B-type models use standard training (faster, more memory)
+- **Memory-Optimized**: Use `--memory-opt` flag (slower, less memory usage)
+- **Automatic selection**: Only affects B-type models (B1, B2, B3, B4, B5)
+- **When to use**: Enable for large datasets or memory-constrained environments
 
 ### 📊 **Step 3: Evaluate Models**
 
