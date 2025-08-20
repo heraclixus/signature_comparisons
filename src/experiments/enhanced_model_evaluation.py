@@ -274,6 +274,17 @@ def evaluate_all_models_enhanced():
                     'trajectory_data': adv_trajectory_data
                 }
         
+        # 3. Evaluate latent SDE models
+        latent_sde_dataset_dir = f'results/{dataset_name}_latent_sde'
+        if os.path.exists(latent_sde_dataset_dir):
+            print(f"\n🧠 Evaluating latent SDE models for {dataset_name}...")
+            latent_sde_results_df, latent_sde_trajectory_data = evaluate_latent_sde_models_for_dataset(dataset_name)
+            if latent_sde_results_df is not None:
+                dataset_results['latent_sde'] = {
+                    'results_df': latent_sde_results_df,
+                    'trajectory_data': latent_sde_trajectory_data
+                }
+        
         # Store results if we have any data for this dataset
         if dataset_results:
             all_results[dataset_name] = dataset_results
@@ -293,7 +304,8 @@ def evaluate_all_models_enhanced():
         dataset_data = all_results[dataset_name]
         non_adv_count = len(dataset_data.get('non_adversarial', {}).get('results_df', []))
         adv_count = len(dataset_data.get('adversarial', {}).get('results_df', []))
-        print(f"   {dataset_name}: {non_adv_count} non-adversarial, {adv_count} adversarial models")
+        latent_sde_count = len(dataset_data.get('latent_sde', {}).get('results_df', []))
+        print(f"   {dataset_name}: {non_adv_count} non-adversarial, {adv_count} adversarial, {latent_sde_count} latent SDE models")
     
     return all_results
 
@@ -448,6 +460,176 @@ def evaluate_adversarial_models_for_dataset(dataset_name: str):
     
     # Create enhanced visualizations for adversarial models
     create_enhanced_visualizations(results_df, trajectory_data, save_dir, f"{dataset_name}_adversarial")
+    
+    return results_df, trajectory_data
+
+
+def evaluate_latent_sde_models_for_dataset(dataset_name: str):
+    """Evaluate latent SDE models for a specific dataset."""
+    print(f"\n{'='*70}")
+    print(f"🧠 Enhanced Latent SDE Model Evaluation for {dataset_name.upper()} Dataset")
+    print(f"{'='*70}")
+    
+    # Setup latent SDE checkpoint manager
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}_latent_sde')
+    
+    # Get list of trained latent SDE models
+    available_models = checkpoint_manager.list_available_models()
+    
+    if not available_models:
+        print(f"❌ No trained latent SDE models found for {dataset_name}")
+        return None, None
+    
+    print(f"Found {len(available_models)} trained latent SDE models for {dataset_name}:")
+    checkpoint_manager.print_available_models()
+    
+    # Setup evaluation data (same as other models)
+    print(f"\nSetting up evaluation data for {dataset_name}_latent_sde...")
+    if dataset_name == 'ou_process':
+        dataset = get_signal(num_samples=64)
+        eval_data = torch.stack([dataset[i][0] for i in range(32)])
+    else:
+        dataset = get_signal(num_samples=64)
+        eval_data = torch.stack([dataset[i][0] for i in range(32)])
+        print(f"   Note: Using OU process data as evaluation baseline for {dataset_name}")
+    
+    print(f"Evaluation data: {eval_data.shape}")
+    
+    # Import latent SDE functions
+    from models.latent_sde.implementations.v1_latent_sde import create_v1_model
+    from models.sdematching.implementations.v2_sde_matching import create_v2_model
+    
+    # Evaluate each latent SDE model
+    results = []
+    trajectory_data = {}
+    
+    for model_id in available_models:
+        print(f"\n{'='*50}")
+        print(f"Evaluating {model_id}")
+        print(f"{'='*50}")
+        
+        try:
+            # Recreate latent SDE model
+            print(f"Recreating latent SDE model {model_id}...")
+            
+            # Create example batch for model initialization
+            example_batch = eval_data[:8]
+            
+            # Create latent SDE model
+            if model_id == "V1":
+                latent_sde_model = create_v1_model(
+                    example_batch=example_batch,
+                    real_data=eval_data,
+                    theta=2.0,      # OU mean reversion rate
+                    mu=0.0,         # OU long-term mean
+                    sigma=0.5,      # OU volatility
+                    hidden_size=64  # Neural network size
+                )
+            elif model_id == "V2":
+                latent_sde_model = create_v2_model(
+                    example_batch=example_batch,
+                    real_data=eval_data,
+                    data_size=1,        # Observable dimension
+                    latent_size=4,      # Latent dimension
+                    hidden_size=64,     # Hidden layer size
+                    noise_std=0.1       # Observation noise
+                )
+            else:
+                print(f"❌ Unknown latent SDE model: {model_id}")
+                continue
+            
+            # Load the trained weights
+            model_dir = f'results/{dataset_name}_latent_sde/trained_models/{model_id}'
+            model_path = os.path.join(model_dir, 'model.pth')
+            if os.path.exists(model_path):
+                state_dict = torch.load(model_path, map_location='cpu')
+                latent_sde_model.load_state_dict(state_dict)
+                print(f"✅ Loaded trained weights for {model_id}")
+            else:
+                print(f"⚠️ No trained weights found for {model_id}, using initialized model")
+            
+            checkpoint_info = checkpoint_manager.get_checkpoint_info(model_id)
+            print(f"✅ Model {model_id} loaded successfully")
+            print(f"Model loaded: {sum(p.numel() for p in latent_sde_model.parameters()):,} parameters")
+            print(f"Training: Epoch {checkpoint_info['epoch']}, Loss {checkpoint_info['loss']:.6f}")
+            
+            # Generate evaluation samples
+            latent_sde_model.eval()
+            with torch.no_grad():
+                samples = latent_sde_model.generate_samples(64)
+                print(f"Generated samples: {samples.shape}")
+                
+                # Generate 20 trajectories for visualization
+                trajectories = latent_sde_model.generate_samples(20)
+                print(f"Generated trajectories for visualization: {trajectories.shape}")
+            
+            # Compute core metrics
+            metrics = compute_core_metrics(samples, eval_data)
+            
+            # Compute empirical std analysis
+            # Extract value dimension for latent SDE models (they generate (batch, 2, time_steps))
+            if trajectories.dim() == 3 and trajectories.shape[1] == 2:
+                trajectories_for_std = trajectories[:, 1, :]  # Extract value dimension
+            else:
+                trajectories_for_std = trajectories
+            
+            std_analysis = compute_empirical_std_analysis(trajectories_for_std, eval_data)
+            
+            # Combine results
+            result = {
+                'model_id': model_id,
+                'training_epoch': checkpoint_info['epoch'],
+                'training_loss': checkpoint_info['loss'],
+                'total_parameters': sum(p.numel() for p in latent_sde_model.parameters()),
+                'model_class': type(latent_sde_model).__name__,
+                **metrics,
+                'std_rmse': std_analysis['std_rmse'],
+                'std_correlation': std_analysis['std_correlation'],
+                'std_mean_absolute_error': std_analysis['std_mean_absolute_error']
+            }
+            
+            results.append(result)
+            
+            # Store trajectory data for visualization (use same processed trajectories)
+            trajectory_data[model_id] = {
+                'trajectories': trajectories_for_std.detach().cpu().numpy(),
+                'empirical_std_generated': std_analysis['empirical_std_generated'],
+                'empirical_std_ground_truth': std_analysis['empirical_std_ground_truth'],
+                'time_steps': std_analysis['time_steps']
+            }
+            
+            print(f"✅ {model_id} evaluation completed")
+            print(f"   RMSE: {metrics['rmse']:.4f}")
+            print(f"   KS Statistic: {metrics['ks_statistic']:.4f}")
+            print(f"   Std RMSE: {std_analysis['std_rmse']:.4f}")
+            print(f"   Std Correlation: {std_analysis['std_correlation']:.4f}")
+            
+        except Exception as e:
+            print(f"❌ Failed to evaluate {model_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    if not results:
+        print("❌ No latent SDE models successfully evaluated")
+        return None, None
+    
+    # Save results to latent SDE evaluation directory
+    results_df = pd.DataFrame(results)
+    save_dir = f"results/{dataset_name}_latent_sde/evaluation"
+    os.makedirs(save_dir, exist_ok=True)
+    
+    results_path = os.path.join(save_dir, 'enhanced_models_evaluation.csv')
+    results_df.to_csv(results_path, index=False)
+    
+    print(f"\n{'='*60}")
+    print(f"ENHANCED EVALUATION COMPLETE FOR {dataset_name.upper()}_LATENT_SDE")
+    print(f"{'='*60}")
+    print(f"Results saved to: {results_path}")
+    print(f"Latent SDE models evaluated: {len(results)}")
+    
+    # Create enhanced visualizations for latent SDE models
+    create_enhanced_visualizations(results_df, trajectory_data, save_dir, f"{dataset_name}_latent_sde")
     
     return results_df, trajectory_data
 
@@ -612,80 +794,211 @@ def create_enhanced_visualizations(results_df: pd.DataFrame, trajectory_data: Di
     """Create enhanced visualizations with trajectories and empirical std analysis."""
     print(f"\nCreating enhanced visualizations for {dataset_name or 'dataset'}...")
     
-    # Sort models by KS statistic (best distribution matching first)
-    sorted_results = results_df.sort_values('ks_statistic').reset_index(drop=True)
-    models = sorted_results['model_id'].tolist()
+    # Define distributional metrics to visualize
+    distributional_metrics = [
+        {
+            'metric': 'rmse',
+            'title': 'RMSE by Model (Lower = Better)',
+            'ylabel': 'RMSE',
+            'color': 'skyblue',
+            'sort_ascending': True
+        },
+        {
+            'metric': 'ks_statistic', 
+            'title': 'KS Statistic by Model (Lower = Better)',
+            'ylabel': 'KS Statistic',
+            'color': 'lightcoral',
+            'sort_ascending': True
+        },
+        {
+            'metric': 'wasserstein_distance',
+            'title': 'Wasserstein Distance by Model (Lower = Better)',
+            'ylabel': 'Wasserstein Distance', 
+            'color': 'lightgreen',
+            'sort_ascending': True
+        },
+        {
+            'metric': 'std_rmse',
+            'title': 'Empirical Std RMSE by Model (Lower = Better)',
+            'ylabel': 'Std RMSE',
+            'color': 'gold',
+            'sort_ascending': True
+        }
+    ]
     
-    # Create figure with 4 subplots
+    # Create figure with 4 subplots - one for each distributional metric
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    title = f'Enhanced Model Evaluation: {dataset_name.upper() if dataset_name else "Dataset"} - Trajectory and Distribution Analysis'
+    title = f'Enhanced Model Evaluation: {dataset_name.upper() if dataset_name else "Dataset"} - Individual Distributional Metrics'
     fig.suptitle(title, fontsize=16, fontweight='bold')
     
-    # 1. RMSE comparison (sorted)
-    ax1 = axes[0, 0]
-    rmse_values = [sorted_results[sorted_results['model_id'] == model]['rmse'].iloc[0] for model in models]
-    bars1 = ax1.bar(range(len(models)), rmse_values, color='skyblue', alpha=0.7)
-    ax1.set_title('RMSE by Model (Sorted by Distribution Quality)', fontweight='bold')
-    ax1.set_ylabel('RMSE')
-    ax1.set_xticks(range(len(models)))
-    ax1.set_xticklabels(models, rotation=45)
-    ax1.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for i, v in enumerate(rmse_values):
-        ax1.text(i, v + max(rmse_values) * 0.01, f'{v:.3f}', ha='center', va='bottom', fontsize=9)
-    
-    # 2. KS Statistic comparison (sorted)
-    ax2 = axes[0, 1]
-    ks_values = [sorted_results[sorted_results['model_id'] == model]['ks_statistic'].iloc[0] for model in models]
-    bars2 = ax2.bar(range(len(models)), ks_values, color='lightcoral', alpha=0.7)
-    ax2.set_title('KS Statistic by Model (Lower = Better Distribution)', fontweight='bold')
-    ax2.set_ylabel('KS Statistic')
-    ax2.set_xticks(range(len(models)))
-    ax2.set_xticklabels(models, rotation=45)
-    ax2.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for i, v in enumerate(ks_values):
-        ax2.text(i, v + max(ks_values) * 0.01, f'{v:.3f}', ha='center', va='bottom', fontsize=9)
-    
-    # 3. Wasserstein Distance comparison (sorted)
-    ax3 = axes[1, 0]
-    wasserstein_values = [sorted_results[sorted_results['model_id'] == model]['wasserstein_distance'].iloc[0] for model in models]
-    bars3 = ax3.bar(range(len(models)), wasserstein_values, color='lightgreen', alpha=0.7)
-    ax3.set_title('Wasserstein Distance by Model (Lower = Better)', fontweight='bold')
-    ax3.set_ylabel('Wasserstein Distance')
-    ax3.set_xticks(range(len(models)))
-    ax3.set_xticklabels(models, rotation=45)
-    ax3.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for i, v in enumerate(wasserstein_values):
-        ax3.text(i, v + max(wasserstein_values) * 0.01, f'{v:.3f}', ha='center', va='bottom', fontsize=9)
-    
-    # 4. Empirical Std RMSE comparison (sorted)
-    ax4 = axes[1, 1]
-    std_rmse_values = [sorted_results[sorted_results['model_id'] == model]['std_rmse'].iloc[0] for model in models]
-    bars4 = ax4.bar(range(len(models)), std_rmse_values, color='gold', alpha=0.7)
-    ax4.set_title('Empirical Std RMSE by Model (Lower = Better)', fontweight='bold')
-    ax4.set_ylabel('Std RMSE')
-    ax4.set_xticks(range(len(models)))
-    ax4.set_xticklabels(models, rotation=45)
-    ax4.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for i, v in enumerate(std_rmse_values):
-        ax4.text(i, v + max(std_rmse_values) * 0.01, f'{v:.3f}', ha='center', va='bottom', fontsize=9)
+    # Create separate bar plot for each distributional metric
+    for i, metric_config in enumerate(distributional_metrics):
+        row = i // 2
+        col = i % 2
+        ax = axes[row, col]
+        
+        metric = metric_config['metric']
+        
+        # Sort models by this specific metric
+        sorted_results = results_df.sort_values(metric, ascending=metric_config['sort_ascending']).reset_index(drop=True)
+        models = sorted_results['model_id'].tolist()
+        values = sorted_results[metric].tolist()
+        
+        # Create bar plot
+        bars = ax.bar(range(len(models)), values, 
+                     color=metric_config['color'], alpha=0.7, edgecolor='black', linewidth=0.5)
+        
+        ax.set_title(metric_config['title'], fontweight='bold', fontsize=12)
+        ax.set_ylabel(metric_config['ylabel'], fontsize=11)
+        ax.set_xticks(range(len(models)))
+        ax.set_xticklabels(models, rotation=45, ha='right', fontsize=10)
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Add value labels on bars
+        max_val = max(values) if values else 1
+        for j, v in enumerate(values):
+            ax.text(j, v + max_val * 0.01, f'{v:.3f}', 
+                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        # Add ranking information as subtitle
+        ax.text(0.5, -0.15, f'Ranked by {metric_config["ylabel"]} (Best → Worst)', 
+               transform=ax.transAxes, ha='center', va='top', 
+               fontsize=9, style='italic', color='gray')
     
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'enhanced_model_comparison.png'), dpi=300, bbox_inches='tight')
     print(f"Enhanced comparison visualization saved to: {os.path.join(save_dir, 'enhanced_model_comparison.png')}")
+    
+    # Create individual metric plots for better visibility
+    create_individual_metric_plots(results_df, save_dir, dataset_name)
     
     # Create trajectory visualization
     create_trajectory_visualization(trajectory_data, save_dir, dataset_name)
     
     # Create empirical std comparison
     create_empirical_std_visualization(trajectory_data, save_dir, dataset_name)
+
+
+def create_individual_metric_plots(results_df: pd.DataFrame, save_dir: str, dataset_name: str = None):
+    """Create individual bar plots for each distributional metric with larger, cleaner visualizations."""
+    print(f"Creating individual metric plots for {dataset_name or 'dataset'}...")
+    
+    # Define distributional metrics with enhanced styling
+    distributional_metrics = [
+        {
+            'metric': 'rmse',
+            'title': 'RMSE Performance Ranking',
+            'ylabel': 'RMSE (Root Mean Square Error)',
+            'color': '#4A90E2',  # Professional blue
+            'sort_ascending': True,
+            'description': 'Point-wise trajectory matching accuracy'
+        },
+        {
+            'metric': 'ks_statistic', 
+            'title': 'KS Statistic Distribution Quality',
+            'ylabel': 'KS Statistic',
+            'color': '#F5A623',  # Professional orange
+            'sort_ascending': True,
+            'description': 'Statistical distribution similarity (lower = better match)'
+        },
+        {
+            'metric': 'wasserstein_distance',
+            'title': 'Wasserstein Distance Distribution Quality',
+            'ylabel': 'Wasserstein Distance', 
+            'color': '#7ED321',  # Professional green
+            'sort_ascending': True,
+            'description': 'Earth Mover\'s Distance between distributions'
+        },
+        {
+            'metric': 'std_rmse',
+            'title': 'Empirical Standard Deviation Matching',
+            'ylabel': 'Std RMSE',
+            'color': '#D0021B',  # Professional red
+            'sort_ascending': True,
+            'description': 'Variance structure matching over time'
+        }
+    ]
+    
+    # Create individual plots for each metric
+    for metric_config in distributional_metrics:
+        metric = metric_config['metric']
+        
+        # Sort models by this specific metric
+        sorted_results = results_df.sort_values(metric, ascending=metric_config['sort_ascending']).reset_index(drop=True)
+        models = sorted_results['model_id'].tolist()
+        values = sorted_results[metric].tolist()
+        
+        # Create individual plot
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        
+        # Create gradient colors for better visual ranking
+        n_models = len(models)
+        colors = [metric_config['color']] * n_models
+        alphas = np.linspace(0.9, 0.4, n_models)  # Best models more opaque
+        
+        bars = ax.bar(range(len(models)), values, 
+                     color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        
+        # Apply gradient alpha
+        for bar, alpha in zip(bars, alphas):
+            bar.set_alpha(alpha)
+        
+        # Styling
+        ax.set_title(f'{metric_config["title"]}\n{dataset_name.upper() if dataset_name else "Dataset"}', 
+                    fontweight='bold', fontsize=16, pad=20)
+        ax.set_ylabel(metric_config['ylabel'], fontsize=14, fontweight='bold')
+        ax.set_xlabel('Models (Ranked Best → Worst)', fontsize=14, fontweight='bold')
+        ax.set_xticks(range(len(models)))
+        ax.set_xticklabels(models, rotation=45, ha='right', fontsize=12)
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+        
+        # Add value labels on bars
+        max_val = max(values) if values else 1
+        for j, v in enumerate(values):
+            # Color-code the text: green for best, red for worst
+            if j == 0:  # Best model
+                text_color = 'darkgreen'
+                text_weight = 'bold'
+            elif j == len(values) - 1:  # Worst model
+                text_color = 'darkred' 
+                text_weight = 'bold'
+            else:
+                text_color = 'black'
+                text_weight = 'normal'
+                
+            ax.text(j, v + max_val * 0.02, f'{v:.4f}', 
+                   ha='center', va='bottom', fontsize=11, 
+                   fontweight=text_weight, color=text_color)
+        
+        # Add description and ranking info
+        description_text = f'{metric_config["description"]}\nRanked by {metric_config["ylabel"]} (Lower = Better Performance)'
+        ax.text(0.02, 0.98, description_text, transform=ax.transAxes, 
+               fontsize=10, va='top', ha='left', style='italic', 
+               bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.7))
+        
+        # Add best/worst annotations
+        if len(values) > 1:
+            # Best model annotation
+            ax.annotate(f'★ BEST\n{models[0]}', 
+                       xy=(0, values[0]), xytext=(0, values[0] + max_val * 0.15),
+                       ha='center', fontsize=10, fontweight='bold', color='darkgreen',
+                       arrowprops=dict(arrowstyle='->', color='darkgreen', lw=2))
+            
+            # Worst model annotation  
+            ax.annotate(f'▼ WORST\n{models[-1]}', 
+                       xy=(len(models)-1, values[-1]), xytext=(len(models)-1, values[-1] + max_val * 0.15),
+                       ha='center', fontsize=10, fontweight='bold', color='darkred',
+                       arrowprops=dict(arrowstyle='->', color='darkred', lw=2))
+        
+        plt.tight_layout()
+        
+        # Save individual plot
+        filename = f'{metric}_ranking_{dataset_name or "dataset"}.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"  ✅ {metric_config['title']} plot saved to: {filename}")
 
 
 def create_trajectory_visualization(trajectory_data: Dict, save_dir: str, dataset_name: str = None):

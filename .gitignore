@@ -16,6 +16,7 @@ results/*/training/*.csv
 results/cross_dataset_analysis/*.csv
 results/adversarial_comparison/*.csv
 results/runtime_analysis/*.csv
+results/cross_dataset_analysis/individual_dataset_rankings/*.csv
 
 # Data and notebooks
 notebooks/

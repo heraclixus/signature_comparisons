@@ -50,6 +50,17 @@ def load_dataset_results():
             all_results.append(adv_df)
         else:
             print(f"   ⚠️ No adversarial results found for {dataset_name}")
+        
+        # Load latent SDE results
+        latent_sde_results_path = f'results/{dataset_name}_latent_sde/evaluation/enhanced_models_evaluation.csv'
+        if os.path.exists(latent_sde_results_path):
+            print(f"   🧠 Loading {dataset_name} latent SDE results...")
+            latent_sde_df = pd.read_csv(latent_sde_results_path)
+            latent_sde_df['dataset'] = dataset_name
+            latent_sde_df['training_type'] = 'latent_sde'
+            all_results.append(latent_sde_df)
+        else:
+            print(f"   ⚠️ No latent SDE results found for {dataset_name}")
     
     if not all_results:
         print("❌ No evaluation results found!")
@@ -61,6 +72,7 @@ def load_dataset_results():
     print(f"✅ Loaded results for {len(base_datasets)} datasets, {len(combined_df)} total evaluations")
     print(f"   Non-adversarial models: {len(combined_df[combined_df['training_type'] == 'non_adversarial'])}")
     print(f"   Adversarial models: {len(combined_df[combined_df['training_type'] == 'adversarial'])}")
+    print(f"   Latent SDE models: {len(combined_df[combined_df['training_type'] == 'latent_sde'])}")
     
     return combined_df
 
@@ -175,14 +187,147 @@ def create_comprehensive_visualizations(rankings_df: pd.DataFrame, overall_df: p
     datasets = rankings_df['dataset'].unique()
     models = overall_df['model_id'].tolist()
     
-    # Create main ranking plots
+    # Create individual distributional metric plots
+    create_individual_distributional_metric_plots(overall_df, save_dir)
+    
+    # Create legacy aggregated plots for compatibility
     create_distributional_ranking_plot(overall_df, save_dir)
     create_rmse_ranking_plot(overall_df, save_dir)
     
     # Create rough vs non-rough analysis
     create_rough_vs_nonrough_analysis(rankings_df, save_dir)
     
+    # Create individual dataset rankings
+    create_individual_dataset_rankings(rankings_df, save_dir)
+    
     print(f"✅ Comprehensive analysis saved to: {save_dir}/")
+
+
+def create_individual_distributional_metric_plots(overall_df: pd.DataFrame, save_dir: str):
+    """Create individual ranking plots for each distributional metric across all datasets."""
+    print("   📊 Creating individual distributional metric plots...")
+    
+    # Define distributional metrics with enhanced styling
+    distributional_metrics = [
+        {
+            'metric': 'rmse_mean',
+            'title': 'Cross-Dataset RMSE Performance Ranking',
+            'ylabel': 'Average RMSE (Lower = Better)',
+            'color': '#4A90E2',  # Professional blue
+            'sort_ascending': True,
+            'description': 'Point-wise trajectory matching accuracy across all datasets'
+        },
+        {
+            'metric': 'ks_statistic_mean', 
+            'title': 'Cross-Dataset KS Statistic Distribution Quality',
+            'ylabel': 'Average KS Statistic (Lower = Better)',
+            'color': '#F5A623',  # Professional orange
+            'sort_ascending': True,
+            'description': 'Statistical distribution similarity across all datasets'
+        },
+        {
+            'metric': 'wasserstein_distance_mean',
+            'title': 'Cross-Dataset Wasserstein Distance Distribution Quality',
+            'ylabel': 'Average Wasserstein Distance (Lower = Better)', 
+            'color': '#7ED321',  # Professional green
+            'sort_ascending': True,
+            'description': 'Earth Mover\'s Distance between distributions across all datasets'
+        },
+        {
+            'metric': 'std_rmse_mean',
+            'title': 'Cross-Dataset Empirical Standard Deviation Matching',
+            'ylabel': 'Average Std RMSE (Lower = Better)',
+            'color': '#D0021B',  # Professional red
+            'sort_ascending': True,
+            'description': 'Variance structure matching over time across all datasets'
+        }
+    ]
+    
+    # Create individual plots for each metric
+    for metric_config in distributional_metrics:
+        metric = metric_config['metric']
+        
+        # Check if metric exists in the data
+        if metric not in overall_df.columns:
+            print(f"   ⚠️ Metric {metric} not found in data, skipping...")
+            continue
+            
+        # Sort models by this specific metric
+        sorted_results = overall_df.sort_values(metric, ascending=metric_config['sort_ascending']).reset_index(drop=True)
+        models = sorted_results['model_id'].tolist()
+        values = sorted_results[metric].tolist()
+        
+        # Create individual plot
+        fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+        
+        # Create gradient colors for better visual ranking
+        n_models = len(models)
+        colors = [metric_config['color']] * n_models
+        alphas = np.linspace(0.9, 0.4, n_models)  # Best models more opaque
+        
+        bars = ax.bar(range(len(models)), values, 
+                     color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+        
+        # Apply gradient alpha
+        for bar, alpha in zip(bars, alphas):
+            bar.set_alpha(alpha)
+        
+        # Styling
+        ax.set_title(f'{metric_config["title"]}\nCross-Dataset Analysis (All Stochastic Processes)', 
+                    fontweight='bold', fontsize=16, pad=20)
+        ax.set_ylabel(metric_config['ylabel'], fontsize=14, fontweight='bold')
+        ax.set_xlabel('Models (Ranked Best → Worst)', fontsize=14, fontweight='bold')
+        ax.set_xticks(range(len(models)))
+        ax.set_xticklabels(models, rotation=45, ha='right', fontsize=12)
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+        
+        # Add value labels on bars
+        max_val = max(values) if values else 1
+        for j, v in enumerate(values):
+            # Color-code the text: green for best, red for worst
+            if j == 0:  # Best model
+                text_color = 'darkgreen'
+                text_weight = 'bold'
+            elif j == len(values) - 1:  # Worst model
+                text_color = 'darkred' 
+                text_weight = 'bold'
+            else:
+                text_color = 'black'
+                text_weight = 'normal'
+                
+            ax.text(j, v + max_val * 0.02, f'{v:.4f}', 
+                   ha='center', va='bottom', fontsize=11, 
+                   fontweight=text_weight, color=text_color)
+        
+        # Add description and ranking info
+        description_text = f'{metric_config["description"]}\nRanked by {metric_config["ylabel"]} (Lower = Better Performance)'
+        ax.text(0.02, 0.98, description_text, transform=ax.transAxes, 
+               fontsize=10, va='top', ha='left', style='italic', 
+               bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.7))
+        
+        # Add best/worst annotations
+        if len(values) > 1:
+            # Best model annotation
+            ax.annotate(f'★ BEST\n{models[0]}', 
+                       xy=(0, values[0]), xytext=(0, values[0] + max_val * 0.15),
+                       ha='center', fontsize=10, fontweight='bold', color='darkgreen',
+                       arrowprops=dict(arrowstyle='->', color='darkgreen', lw=2))
+            
+            # Worst model annotation  
+            ax.annotate(f'▼ WORST\n{models[-1]}', 
+                       xy=(len(models)-1, values[-1]), xytext=(len(models)-1, values[-1] + max_val * 0.15),
+                       ha='center', fontsize=10, fontweight='bold', color='darkred',
+                       arrowprops=dict(arrowstyle='->', color='darkred', lw=2))
+        
+        plt.tight_layout()
+        
+        # Save individual plot
+        filename = f'cross_dataset_{metric}_ranking.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"      ✅ {metric_config['title']} plot saved to: {filename}")
 
 
 def create_distributional_ranking_plot(overall_df: pd.DataFrame, save_dir: str):
@@ -345,42 +490,85 @@ def create_rough_nonrough_comparison_plots(rough_rankings: pd.DataFrame, nonroug
     """Create comparison plots for rough vs non-rough dataset performance."""
     print("   🎨 Creating rough vs non-rough comparison plots...")
     
-    # Create figure with 2x2 layout
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Model Performance: Rough vs Non-Rough Stochastic Processes', 
+    # Create figure with 2x4 layout for individual distributional metrics
+    fig, axes = plt.subplots(2, 4, figsize=(20, 12))
+    fig.suptitle('Model Performance: Rough vs Non-Rough Stochastic Processes - Individual Distributional Metrics', 
                  fontsize=18, fontweight='bold', y=0.98)
     
-    # 1. Distributional Quality on Rough Processes
-    ax1 = axes[0, 0]
-    create_category_ranking_plot(ax1, rough_rankings, 'distributional_score', 
-                                'Rough Processes: Distributional Quality',
-                                'Distributional Score (Lower = Better)', 'Reds_r')
+    # Define metrics to compare
+    metrics_config = [
+        {'metric': 'rmse', 'title': 'RMSE', 'ylabel': 'RMSE (Lower = Better)', 'colormap': 'Blues_r'},
+        {'metric': 'ks_statistic', 'title': 'KS Statistic', 'ylabel': 'KS Statistic (Lower = Better)', 'colormap': 'Oranges_r'},
+        {'metric': 'wasserstein_distance', 'title': 'Wasserstein Distance', 'ylabel': 'Wasserstein Distance (Lower = Better)', 'colormap': 'Greens_r'},
+        {'metric': 'std_rmse', 'title': 'Empirical Std RMSE', 'ylabel': 'Std RMSE (Lower = Better)', 'colormap': 'Purples_r'}
+    ]
     
-    # 2. Distributional Quality on Non-Rough Processes  
-    ax2 = axes[0, 1]
-    create_category_ranking_plot(ax2, nonrough_rankings, 'distributional_score',
-                                'Non-Rough Processes: Distributional Quality', 
-                                'Distributional Score (Lower = Better)', 'Blues_r')
-    
-    # 3. RMSE on Rough Processes
-    ax3 = axes[1, 0]
-    create_category_ranking_plot(ax3, rough_rankings, 'rmse',
-                                'Rough Processes: RMSE Accuracy',
-                                'RMSE (Lower = Better)', 'Oranges_r')
-    
-    # 4. RMSE on Non-Rough Processes
-    ax4 = axes[1, 1]
-    create_category_ranking_plot(ax4, nonrough_rankings, 'rmse',
-                                'Non-Rough Processes: RMSE Accuracy',
-                                'RMSE (Lower = Better)', 'Greens_r')
+    # Create plots for each metric
+    for i, metric_config in enumerate(metrics_config):
+        # Rough processes (top row)
+        ax_rough = axes[0, i]
+        create_category_ranking_plot(ax_rough, rough_rankings, metric_config['metric'], 
+                                    f'Rough Processes: {metric_config["title"]}',
+                                    metric_config['ylabel'], 'Reds_r')
+        
+        # Non-rough processes (bottom row)
+        ax_nonrough = axes[1, i]
+        create_category_ranking_plot(ax_nonrough, nonrough_rankings, metric_config['metric'],
+                                    f'Non-Rough Processes: {metric_config["title"]}', 
+                                    metric_config['ylabel'], metric_config['colormap'])
     
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'rough_vs_nonrough_analysis.png'), 
                 dpi=300, bbox_inches='tight')
     print(f"   ✅ Rough vs non-rough comparison saved to: rough_vs_nonrough_analysis.png")
     
-    # Create side-by-side ranking comparison
-    create_side_by_side_ranking_comparison(rough_rankings, nonrough_rankings, save_dir)
+    # Create individual side-by-side comparisons for each metric
+    create_individual_side_by_side_comparisons(rough_rankings, nonrough_rankings, save_dir)
+
+
+def create_individual_side_by_side_comparisons(rough_rankings: pd.DataFrame, nonrough_rankings: pd.DataFrame, save_dir: str):
+    """Create individual side-by-side comparison plots for each distributional metric."""
+    print("   📊 Creating individual side-by-side metric comparisons...")
+    
+    # Define metrics to compare
+    metrics_config = [
+        {'metric': 'rmse', 'title': 'RMSE Performance: Rough vs Non-Rough Processes', 'ylabel': 'RMSE (Lower = Better)'},
+        {'metric': 'ks_statistic', 'title': 'KS Statistic Quality: Rough vs Non-Rough Processes', 'ylabel': 'KS Statistic (Lower = Better)'},
+        {'metric': 'wasserstein_distance', 'title': 'Wasserstein Distance Quality: Rough vs Non-Rough Processes', 'ylabel': 'Wasserstein Distance (Lower = Better)'},
+        {'metric': 'std_rmse', 'title': 'Empirical Std RMSE: Rough vs Non-Rough Processes', 'ylabel': 'Std RMSE (Lower = Better)'}
+    ]
+    
+    # Find common models
+    rough_models = set(rough_rankings['model_id'])
+    nonrough_models = set(nonrough_rankings['model_id'])
+    common_models = rough_models.intersection(nonrough_models)
+    
+    if not common_models:
+        print("   ⚠️ No common models found for side-by-side comparison")
+        return
+    
+    common_models = sorted(common_models)
+    
+    # Create individual plots for each metric
+    for metric_config in metrics_config:
+        metric = metric_config['metric']
+        
+        # Create individual plot
+        fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+        
+        # Create paired comparison
+        create_paired_category_plot(ax, rough_rankings, nonrough_rankings, common_models, 
+                                   metric, metric_config['title'], metric_config['ylabel'])
+        
+        plt.tight_layout()
+        
+        # Save individual plot
+        filename = f'rough_vs_nonrough_{metric}_comparison.png'
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"      ✅ {metric_config['title']} comparison saved to: {filename}")
 
 
 def create_category_ranking_plot(ax, rankings_df: pd.DataFrame, metric: str, title: str, ylabel: str, colormap: str):
@@ -483,6 +671,156 @@ def create_paired_category_plot(ax, rough_df: pd.DataFrame, nonrough_df: pd.Data
                    bar.get_height() + max_val * 0.05,  # Increased spacing
                    f'{value:.3f}', ha='center', va='bottom', 
                    fontsize=10, fontweight='bold', color=color)  # Larger, bolder, colored text
+
+
+def create_individual_dataset_rankings(rankings_df: pd.DataFrame, save_dir: str):
+    """Create individual ranking plots for each dataset and each distributional metric."""
+    print("   📊 Creating individual dataset rankings...")
+    
+    # Get unique datasets
+    datasets = rankings_df['dataset'].unique()
+    
+    # Define distributional metrics
+    distributional_metrics = [
+        {
+            'metric': 'rmse',
+            'title': 'RMSE Performance Ranking',
+            'ylabel': 'RMSE (Lower = Better)',
+            'color': '#4A90E2',
+            'sort_ascending': True,
+            'description': 'Point-wise trajectory matching accuracy'
+        },
+        {
+            'metric': 'ks_statistic', 
+            'title': 'KS Statistic Distribution Quality',
+            'ylabel': 'KS Statistic (Lower = Better)',
+            'color': '#F5A623',
+            'sort_ascending': True,
+            'description': 'Statistical distribution similarity (lower = better match)'
+        },
+        {
+            'metric': 'wasserstein_distance',
+            'title': 'Wasserstein Distance Distribution Quality',
+            'ylabel': 'Wasserstein Distance (Lower = Better)', 
+            'color': '#7ED321',
+            'sort_ascending': True,
+            'description': 'Earth Mover\'s Distance between distributions'
+        },
+        {
+            'metric': 'std_rmse',
+            'title': 'Empirical Standard Deviation Matching',
+            'ylabel': 'Std RMSE (Lower = Better)',
+            'color': '#D0021B',
+            'sort_ascending': True,
+            'description': 'Variance structure matching over time'
+        }
+    ]
+    
+    # Create directory for individual dataset rankings
+    dataset_rankings_dir = os.path.join(save_dir, 'individual_dataset_rankings')
+    os.makedirs(dataset_rankings_dir, exist_ok=True)
+    
+    # Create rankings for each dataset and each metric
+    for dataset in datasets:
+        print(f"      Creating rankings for {dataset}...")
+        
+        # Filter data for this dataset
+        dataset_data = rankings_df[rankings_df['dataset'] == dataset].copy()
+        
+        if len(dataset_data) == 0:
+            print(f"      ⚠️ No data found for dataset {dataset}")
+            continue
+        
+        # Create plots for each metric
+        for metric_config in distributional_metrics:
+            metric = metric_config['metric']
+            
+            # Check if metric exists
+            if metric not in dataset_data.columns:
+                print(f"      ⚠️ Metric {metric} not found for dataset {dataset}")
+                continue
+            
+            # Sort models by this metric
+            sorted_data = dataset_data.sort_values(metric, ascending=metric_config['sort_ascending']).reset_index(drop=True)
+            models = sorted_data['model_id'].tolist()
+            values = sorted_data[metric].tolist()
+            
+            # Create individual plot
+            fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+            
+            # Create gradient colors for better visual ranking
+            n_models = len(models)
+            colors = [metric_config['color']] * n_models
+            alphas = np.linspace(0.9, 0.4, n_models)  # Best models more opaque
+            
+            bars = ax.bar(range(len(models)), values, 
+                         color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+            
+            # Apply gradient alpha
+            for bar, alpha in zip(bars, alphas):
+                bar.set_alpha(alpha)
+            
+            # Styling
+            ax.set_title(f'{metric_config["title"]}\n{dataset.upper()} Dataset', 
+                        fontweight='bold', fontsize=16, pad=20)
+            ax.set_ylabel(metric_config['ylabel'], fontsize=14, fontweight='bold')
+            ax.set_xlabel('Models (Ranked Best → Worst)', fontsize=14, fontweight='bold')
+            ax.set_xticks(range(len(models)))
+            ax.set_xticklabels(models, rotation=45, ha='right', fontsize=12)
+            ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+            
+            # Add value labels on bars
+            max_val = max(values) if values else 1
+            for j, v in enumerate(values):
+                # Color-code the text: green for best, red for worst
+                if j == 0:  # Best model
+                    text_color = 'darkgreen'
+                    text_weight = 'bold'
+                elif j == len(values) - 1:  # Worst model
+                    text_color = 'darkred' 
+                    text_weight = 'bold'
+                else:
+                    text_color = 'black'
+                    text_weight = 'normal'
+                    
+                ax.text(j, v + max_val * 0.02, f'{v:.4f}', 
+                       ha='center', va='bottom', fontsize=11, 
+                       fontweight=text_weight, color=text_color)
+            
+            # Add description and ranking info
+            description_text = f'{metric_config["description"]}\nRanked by {metric_config["ylabel"]} (Lower = Better Performance)'
+            ax.text(0.02, 0.98, description_text, transform=ax.transAxes, 
+                   fontsize=10, va='top', ha='left', style='italic', 
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='lightgray', alpha=0.7))
+            
+            # Add best/worst annotations
+            if len(values) > 1:
+                # Best model annotation
+                ax.annotate(f'★ BEST\n{models[0]}', 
+                           xy=(0, values[0]), xytext=(0, values[0] + max_val * 0.15),
+                           ha='center', fontsize=10, fontweight='bold', color='darkgreen',
+                           arrowprops=dict(arrowstyle='->', color='darkgreen', lw=2))
+                
+                # Worst model annotation  
+                ax.annotate(f'▼ WORST\n{models[-1]}', 
+                           xy=(len(models)-1, values[-1]), xytext=(len(models)-1, values[-1] + max_val * 0.15),
+                           ha='center', fontsize=10, fontweight='bold', color='darkred',
+                           arrowprops=dict(arrowstyle='->', color='darkred', lw=2))
+            
+            plt.tight_layout()
+            
+            # Save individual plot
+            filename = f'{dataset}_{metric}_ranking.png'
+            filepath = os.path.join(dataset_rankings_dir, filename)
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.close()
+        
+        # Save dataset-specific CSV
+        dataset_csv_path = os.path.join(dataset_rankings_dir, f'{dataset}_rankings.csv')
+        dataset_data.to_csv(dataset_csv_path, index=False)
+    
+    print(f"      ✅ Individual dataset rankings saved to: {dataset_rankings_dir}/")
+    print(f"         Created rankings for {len(datasets)} datasets × {len(distributional_metrics)} metrics = {len(datasets) * len(distributional_metrics)} plots")
 
 
 def run_cross_dataset_analysis():
