@@ -2,6 +2,69 @@
 
 A comprehensive comparison of signature-based methods for time series generation, including both non-adversarial and adversarial training approaches across multiple stochastic processes.
 
+## 📋 Model Overview
+
+### Complete Model Architecture Descriptions
+
+| Model ID | Generator Type | Loss Function | Signature Method | Training Type | Description |
+|----------|----------------|---------------|------------------|---------------|-------------|
+| **A1** | CannedNet | T-Statistic | Truncated | Non-Adversarial | Baseline model with simple generator and statistical loss |
+| **A2** | CannedNet | Signature Scoring | Truncated | Non-Adversarial | CannedNet with signature-based scoring loss |
+| **A3** | CannedNet | Signature MMD | Truncated | Non-Adversarial | CannedNet with Maximum Mean Discrepancy loss |
+| **A4** | CannedNet | Log Signature | Truncated | Non-Adversarial | CannedNet with logarithmic signature features |
+| **B1** | Neural SDE | Signature Scoring | PDE-Solved | Non-Adversarial | Neural SDE generator with signature scoring |
+| **B2** | Neural SDE | Signature MMD | PDE-Solved | Non-Adversarial | Neural SDE with MMD loss and PDE-solved signatures |
+| **B3** | Neural SDE | T-Statistic | PDE-Solved | Non-Adversarial | Neural SDE with statistical T-test loss |
+| **B4** | Neural SDE | Signature MMD | Truncated | Non-Adversarial | Neural SDE with MMD and truncated signatures |
+| **B5** | Neural SDE | Signature Scoring | Truncated | Non-Adversarial | Neural SDE with scoring and truncated signatures |
+| **A2_ADV** | CannedNet | Signature Scoring | Truncated | ⚔️ Adversarial | A2 with adversarial discriminator |
+| **A3_ADV** | CannedNet | Signature MMD | Truncated | ⚔️ Adversarial | A3 with adversarial discriminator |
+| **B1_ADV** | Neural SDE | Signature Scoring | PDE-Solved | ⚔️ Adversarial | B1 with adversarial discriminator |
+| **B2_ADV** | Neural SDE | Signature MMD | PDE-Solved | ⚔️ Adversarial | B2 with adversarial discriminator |
+| **B4_ADV** | Neural SDE | Signature MMD | Truncated | ⚔️ Adversarial | B4 with adversarial discriminator |
+| **B5_ADV** | Neural SDE | Signature Scoring | Truncated | ⚔️ Adversarial | B5 with adversarial discriminator |
+| **V1** | Latent SDE | ELBO | N/A | 🧠 Latent SDE | TorchSDE with OU process prior + learned posterior |
+| **V2** | Latent SDE | SDE Matching | N/A | 🧠 Latent SDE | Prior/posterior networks with 3-component loss |
+
+### Key Architecture Components
+
+#### **Generator Types:**
+- **CannedNet**: Simple feedforward neural network generator
+- **Neural SDE**: Stochastic Differential Equation-based generator with drift/diffusion networks
+- **Latent SDE**: SDE operating in latent space with encoder/decoder components
+
+#### **Loss Functions:**
+- **T-Statistic**: Statistical hypothesis testing loss
+- **Signature Scoring**: Signature-based scoring function loss
+- **Signature MMD**: Maximum Mean Discrepancy using signature kernels
+- **Log Signature**: Logarithmic signature feature matching
+- **ELBO**: Evidence Lower Bound (variational inference)
+- **SDE Matching**: 3-component loss (prior KL + SDE matching + reconstruction)
+
+#### **Signature Methods:**
+- **Truncated**: Standard truncated signature computation
+- **PDE-Solved**: Signatures computed via PDE solving methods
+- **N/A**: Not applicable (latent SDE models don't use signatures directly)
+
+#### **Training Types:**
+- **Non-Adversarial**: Direct loss optimization
+- **⚔️ Adversarial**: Generator vs discriminator training
+- **🧠 Latent SDE**: Variational inference in latent SDE space
+
+### Quick Reference
+
+#### **Best Models by Category:**
+- **🏆 Overall Champion**: V2 (SDE Matching) - Rank #1
+- **Traditional Signature Champion**: B4 (Neural SDE + MMD) - Rank #2  
+- **Efficient Alternative**: V1 (TorchSDE Latent SDE) - Rank #5, only 4.5K parameters
+- **Best Adversarial**: B5_ADV (Neural SDE + Adversarial Scoring) - Rank #6
+
+#### **Model Families:**
+- **A-Series (A1-A4)**: CannedNet-based models with different signature losses
+- **B-Series (B1-B5)**: Neural SDE-based models with signature methods
+- **V-Series (V1-V2)**: Latent SDE models with variational inference
+- **_ADV Variants**: Adversarial training versions of compatible models
+
 ## 🏆 Model Performance Rankings
 
 ### Complete Model Performance (17 Models Across 8 Datasets)
@@ -28,21 +91,26 @@ A comprehensive comparison of signature-based methods for time series generation
 
 *Rankings based on distributional quality (KS statistic + Wasserstein distance) across 8 stochastic processes*
 
-### Model Architecture Details
+**Note**: T-statistic models (A1, B3) cannot be used with adversarial training due to signature dimension conflicts.
 
-#### Non-Adversarial Models (9 models)
-- **A1-A4**: CannedNet generator + Various losses (T-Statistic, Scoring, MMD)
-- **B1-B5**: Neural SDE generator + Various losses + Signature methods
+## 📊 Evaluation Methodology
 
-#### Adversarial Models (6 models)  
-- **A2_ADV, A3_ADV**: CannedNet + Adversarial discriminators
-- **B1_ADV, B2_ADV, B4_ADV, B5_ADV**: Neural SDE + Adversarial discriminators
+### Distributional Metrics (Primary Focus)
+Our evaluation prioritizes **distributional quality** over point-wise accuracy, as appropriate for stochastic processes:
 
-#### Latent SDE Models (2 models) 🧠
-- **V1**: TorchSDE Latent SDE - OU process prior + learned posterior
-- **V2**: SDE Matching - Prior/posterior networks with 3-component loss
+| Metric | Weight | Description | Interpretation |
+|--------|--------|-------------|----------------|
+| **KS Statistic** | 3.0 | Kolmogorov-Smirnov test statistic | Lower = better distribution matching |
+| **Wasserstein Distance** | 2.5 | Earth Mover's Distance | Lower = better distribution similarity |
+| **Empirical Std RMSE** | 2.0 | Variance structure matching | Lower = better temporal variance matching |
+| **RMSE** | 1.0 | Point-wise trajectory error | Lower = better trajectory matching |
 
-*Note: T-statistic models (A1, B3) cannot be used with adversarial training due to signature dimension conflicts*
+### Weighted Ranking Formula
+```
+Weighted Score = (KS_Rank × 3.0 + Wasserstein_Rank × 2.5 + Std_RMSE_Rank × 2.0 + RMSE_Rank × 1.0) / 8.5
+```
+
+This weighting emphasizes **distributional quality** and **variance structure** over simple point-wise accuracy, which is more appropriate for evaluating stochastic process generators.
 
 ## 🚀 Quick Start
 
@@ -294,6 +362,24 @@ print(f"V1 samples: {v1_samples.shape}")  # (100, 2, time_steps)
 print(f"V2 samples: {v2_samples.shape}")  # (100, 2, time_steps)
 ```
 
+## 📄 Individual Dataset Results
+
+For detailed analysis of each stochastic process, see the individual dataset documentation:
+
+### 🌊 Rough Processes (H < 0.5)
+- **[rBergomi Results](rbergomi_results.md)** - Rough Bergomi volatility model analysis
+- **[FBM H=0.3 Results](fbm_h03_results.md)** - Anti-persistent FBM analysis  
+- **[FBM H=0.4 Results](fbm_h04_results.md)** - Anti-persistent FBM analysis
+
+### 🏔️ Non-Rough Processes (H ≥ 0.5)
+- **[OU Process Results](ou_process_results.md)** - Ornstein-Uhlenbeck mean-reverting analysis
+- **[Heston Results](heston_results.md)** - Stochastic volatility model analysis
+- **[Brownian Motion Results](brownian_results.md)** - Standard Brownian motion analysis
+- **[FBM H=0.6 Results](fbm_h06_results.md)** - Persistent FBM analysis
+- **[FBM H=0.7 Results](fbm_h07_results.md)** - Persistent FBM analysis
+
+*Each dataset file contains comprehensive model performance analysis with visualizations for non-adversarial, adversarial, and latent SDE approaches.*
+
 ## 📁 Repository Structure
 
 ```
@@ -304,7 +390,8 @@ signature_comparisons/
 │   ├── losses/                    # Loss function implementations
 │   └── signatures/                # Signature computation methods
 ├── results/                       # Generated results and plots
-└── README.md                      # This file
+├── README.md                      # This file (main overview)
+└── {dataset}_results.md           # Individual dataset analyses (×8)
 ```
 
 ## 🎯 Key Findings
