@@ -36,6 +36,12 @@ try:
 except ImportError:
     C3_AVAILABLE = False
 
+try:
+    from .hybrid_latent_sde import C4Model, create_c4_model
+    C4_AVAILABLE = True
+except ImportError:
+    C4_AVAILABLE = False
+
 def get_all_model_creators():
     """Get dictionary of all model creation functions."""
     creators = {
@@ -57,6 +63,8 @@ def get_all_model_creators():
         creators['C2'] = create_c2_model
     if C3_AVAILABLE:
         creators['C3'] = create_c3_model
+    if C4_AVAILABLE:
+        creators['C4'] = create_c4_model
     
     return creators
 
@@ -89,3 +97,5 @@ if C2_AVAILABLE:
     __all__.extend(['C2Model', 'create_c2_model'])
 if C3_AVAILABLE:
     __all__.extend(['C3Model', 'create_c3_model'])
+if C4_AVAILABLE:
+    __all__.extend(['C4Model', 'create_c4_model'])

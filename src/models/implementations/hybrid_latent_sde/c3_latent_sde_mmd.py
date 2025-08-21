@@ -130,7 +130,7 @@ class C3Model(BaseSignatureModel):
     def __init__(self, example_batch: torch.Tensor, real_data: torch.Tensor,
                  theta: float = 2.0, mu: float = 0.0, sigma: float = 0.5,
                  hidden_size: int = 200, sig_depth: int = 4,
-                 elbo_weight: float = 1.0, mmd_weight: float = 0.05,
+                 elbo_weight: float = 1.0, mmd_weight: float = 55.0,
                  mmd_sigma: float = 1.0):
         """
         Initialize C3 hybrid model.
@@ -359,7 +359,7 @@ def create_c3_model(example_batch: torch.Tensor, real_data: torch.Tensor,
         'hidden_size': 200,     # Latent SDE hidden size
         'sig_depth': 4,         # Signature depth
         'elbo_weight': 1.0,     # ELBO loss weight
-        'mmd_weight': 0.05,     # Signature MMD weight (to be optimized)
+        'mmd_weight': 55.0,     # Signature MMD weight (~10% contribution for strong signature constraint)
         'mmd_sigma': 1.0        # RBF kernel bandwidth
     }
     

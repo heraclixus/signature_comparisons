@@ -113,7 +113,7 @@ class C2Model(BaseSignatureModel):
     def __init__(self, example_batch: torch.Tensor, real_data: torch.Tensor,
                  theta: float = 2.0, mu: float = 0.0, sigma: float = 0.5,
                  hidden_size: int = 200, sig_depth: int = 4,
-                 elbo_weight: float = 1.0, scoring_weight: float = 0.1,
+                 elbo_weight: float = 1.0, scoring_weight: float = 2.8,
                  scoring_sigma: float = 1.0):
         """
         Initialize C2 hybrid model.
@@ -342,7 +342,7 @@ def create_c2_model(example_batch: torch.Tensor, real_data: torch.Tensor,
         'hidden_size': 200,     # Latent SDE hidden size
         'sig_depth': 4,         # Signature depth
         'elbo_weight': 1.0,     # ELBO loss weight
-        'scoring_weight': 0.1,  # Signature scoring weight (~0.4% contribution, meaningful regularization)
+        'scoring_weight': 2.8,  # Signature scoring weight (~10% contribution for strong signature constraint)
         'scoring_sigma': 1.0    # RBF kernel bandwidth
     }
     
