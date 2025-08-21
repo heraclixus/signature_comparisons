@@ -98,6 +98,19 @@ tstat_weight = 0.7  # Target: ~10% contribution
 - **Weight**: 0.7 provides balanced 10% influence
 - **Effect**: Strong distributional constraint with efficient architecture
 
+### **C5: V2 SDE Matching + Signature Scoring**
+```python
+sde_weight = 1.0
+scoring_weight = 0.35  # Target: ~10% contribution
+```
+
+**Justification:**
+- **Signature Scoring scale**: ~16.3 (consistent with V1)
+- **SDE Matching scale**: ~68 (smaller than ELBO)
+- **Ratio**: 4.2:1 (much better than V1 series)
+- **Weight**: 0.35 provides target 8-10% influence
+- **Effect**: Strong similarity constraint via scoring rule with efficient V2 architecture
+
 ## 🎯 **Design Rationale**
 
 ### **Why 10% Target?**

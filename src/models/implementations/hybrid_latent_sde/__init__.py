@@ -18,6 +18,7 @@ from .c1_latent_sde_tstat import C1Model, create_c1_model
 from .c2_latent_sde_scoring import C2Model, create_c2_model
 from .c3_latent_sde_mmd import C3Model, create_c3_model
 from .c4_sde_matching_tstat import C4Model, create_c4_model
+from .c5_sde_matching_scoring import C5Model, create_c5_model
 
 __all__ = [
     'C1Model',
@@ -27,5 +28,7 @@ __all__ = [
     'C3Model',
     'create_c3_model',
     'C4Model',
-    'create_c4_model'
+    'create_c4_model',
+    'C5Model',
+    'create_c5_model'
 ]
