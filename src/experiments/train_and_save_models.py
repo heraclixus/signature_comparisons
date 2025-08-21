@@ -107,6 +107,12 @@ try:
 except ImportError:
     C5_AVAILABLE = False
 
+try:
+    from models.implementations.hybrid_latent_sde.c6_sde_matching_mmd import create_c6_model
+    C6_AVAILABLE = True
+except ImportError:
+    C6_AVAILABLE = False
+
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
@@ -436,6 +442,15 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 print(f"🔄 C5 exists but retraining due to --retrain-all flag")
             models_to_train.append(("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring"))
     
+    # Check C6 (Hybrid SDE Matching + Signature MMD)
+    if C6_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("C6"):
+            print(f"⏭️ C6 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("C6"):
+                print(f"🔄 C6 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD"))
+    
     # C1-C3 models removed - not truly generative
     
     if not models_to_train:
@@ -634,7 +649,8 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("C2", create_c2_model, "Hybrid Latent SDE + Signature Scoring", C2_AVAILABLE),
         ("C3", create_c3_model, "Hybrid Latent SDE + Signature MMD", C3_AVAILABLE),
         ("C4", create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
-        ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE)
+        ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
+        ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE)
     ]
     
     for model_id, create_fn, description, available in model_configs:
