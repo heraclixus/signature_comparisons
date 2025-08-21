@@ -123,6 +123,71 @@ conda activate sig19
 cd /path/to/signature_comparisons
 ```
 
+n### 📊 Dataset Generation (Recommended First Step)
+
+**Important**: As of the latest update, datasets are now pre-generated and saved to disk for faster training. This avoids regenerating data on every training run.
+
+**New Dataset Specifications:**
+- **Sample Paths**: 32,768 (128 × 256) for comprehensive training
+- **Time Points**: 64 per path for efficient computation
+- **Batch Size**: 128 for optimal training performance
+- **Storage**: ~16 MB per dataset, organized in separate subdirectories
+- **Implementation**: Uses proper mathematical models (HestonModel, rBergomi classes)
+
+#### Generate All Datasets
+```bash
+# Generate all datasets with default parameters (32,768 samples, 64 time points)
+python src/scripts/regenerate_all_datasets.py
+
+# Generate with custom parameters
+python src/scripts/generate_datasets.py --samples 1000 --points 50
+
+# Generate specific datasets only
+python src/scripts/generate_datasets.py --datasets ou_process,heston,brownian
+```
+
+#### Check Saved Datasets
+```bash
+# List all currently saved datasets
+python src/scripts/generate_datasets.py --list
+
+# Clean up old dataset versions (keep 3 most recent)
+python src/scripts/generate_datasets.py --cleanup 3
+```
+
+#### Available Datasets
+- **ou_process**: Ornstein-Uhlenbeck (mean-reverting)
+- **heston**: Heston stochastic volatility model  
+- **rbergomi**: Rough Bergomi model
+- **brownian**: Standard Brownian motion
+- **fbm_h03**: Fractional Brownian Motion (H=0.3, anti-persistent)
+- **fbm_h04**: Fractional Brownian Motion (H=0.4, anti-persistent)
+- **fbm_h06**: Fractional Brownian Motion (H=0.6, persistent)
+- **fbm_h07**: Fractional Brownian Motion (H=0.7, persistent)
+
+### 🎨 Dataset Visualization
+
+Visualize sample paths and statistical properties of generated datasets:
+
+```bash
+# Visualize all datasets
+python src/scripts/visualize_datasets.py
+
+# Visualize specific datasets
+python src/scripts/visualize_datasets.py --datasets ou_process,heston,fbm_h03
+
+# Customize visualization
+python src/scripts/visualize_datasets.py --num-paths 15 --save-format pdf --dpi 600
+
+# List available datasets for visualization
+python src/scripts/visualize_datasets.py --list
+```
+
+**Generated Visualizations:**
+- **Sample Paths**: Multiple trajectory plots showing stochastic behavior
+- **Statistical Summary**: Distribution analysis, confidence bands, variance evolution, and correlation matrices
+- **Saved Location**: `data/{dataset_name}/visualizations/`
+
 ### Training Models
 
 #### Non-Adversarial Training

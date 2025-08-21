@@ -221,21 +221,36 @@ class ModelTrainer:
         return history
 
 
-def setup_training_data(n_samples: int = 256, n_points: int = 100, batch_size: int = 32):
-    """Setup training data for all models."""
-    print(f"Setting up training data...")
+def setup_training_data(n_samples: int = 32768, n_points: int = 64, batch_size: int = 128, dataset_name: str = 'ou_process'):
+    """Setup training data for all models using persistence-enabled dataset manager."""
+    print(f"Setting up training data for {dataset_name.upper()}...")
     torch.manual_seed(42)
     np.random.seed(42)
     
-    # Training data
-    train_dataset = generative_model.get_noise(n_points=n_points, num_samples=n_samples)
-    train_loader = torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    # Use MultiDatasetManager with persistence for consistent data loading
+    dataset_manager = MultiDatasetManager(use_persistence=True)
     
-    # Test data for model initialization
-    signals = generative_model.get_signal(num_samples=64, n_points=n_points).tensors[0]
-    example_batch, _ = next(iter(torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)))
+    if dataset_name == 'ou_process':
+        # For OU process, we need both noise (for training) and signal (for model initialization)
+        # Training data (noise)
+        train_dataset = generative_model.get_noise(n_points=n_points, num_samples=n_samples)
+        train_loader = torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+        
+        # Test data for model initialization (signal)  
+        signals_dataset = dataset_manager.get_dataset('ou_process', num_samples=256, n_points=n_points)
+        signals = torch.stack([signals_dataset[i][0] for i in range(min(256, len(signals_dataset)))])
+        example_batch, _ = next(iter(torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)))
+    else:
+        # For other datasets, use the dataset manager
+        full_dataset = dataset_manager.get_dataset(dataset_name, num_samples=n_samples, n_points=n_points)
+        train_loader = torchdata.DataLoader(full_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+        
+        # Get signals for model initialization
+        signals_dataset = dataset_manager.get_dataset(dataset_name, num_samples=256, n_points=n_points)
+        signals = torch.stack([signals_dataset[i][0] for i in range(min(256, len(signals_dataset)))])
+        example_batch, _ = next(iter(torchdata.DataLoader(full_dataset, batch_size=batch_size, shuffle=False)))
     
-    print(f"Training: {len(train_dataset)} samples, batch size {batch_size}")
+    print(f"Training: {len(train_loader.dataset)} samples, batch size {batch_size}")
     print(f"Test data: {signals.shape}")
     
     return train_loader, example_batch, signals
@@ -260,7 +275,7 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
     checkpoint_manager.print_available_models()
     
     # Setup training data
-    train_loader, example_batch, signals = setup_training_data()
+    train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name)
     
     # Track which models to train
     models_to_train = []
@@ -468,19 +483,19 @@ def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: b
         print("🧠 Memory optimization enabled for B-type models")
     print("=" * 70)
     
-    # Initialize dataset manager
-    dataset_manager = MultiDatasetManager()
+    # Initialize dataset manager with persistence
+    dataset_manager = MultiDatasetManager(use_persistence=True)
     
-    # Get all datasets
+    # Get all datasets (they will be loaded from disk if available, generated otherwise)
     datasets = {
         'ou_process': None,  # Use existing OU data generation
-        'heston': dataset_manager.get_dataset('heston', num_samples=256),
-        'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=256),
-        'brownian': dataset_manager.get_dataset('brownian', num_samples=256),
-        'fbm_h03': dataset_manager.get_dataset('fbm_h03', num_samples=256),
-        'fbm_h04': dataset_manager.get_dataset('fbm_h04', num_samples=256),
-        'fbm_h06': dataset_manager.get_dataset('fbm_h06', num_samples=256),
-        'fbm_h07': dataset_manager.get_dataset('fbm_h07', num_samples=256)
+        'heston': dataset_manager.get_dataset('heston', num_samples=32768),
+        'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=32768),
+        'brownian': dataset_manager.get_dataset('brownian', num_samples=32768),
+        'fbm_h03': dataset_manager.get_dataset('fbm_h03', num_samples=32768),
+        'fbm_h04': dataset_manager.get_dataset('fbm_h04', num_samples=32768),
+        'fbm_h06': dataset_manager.get_dataset('fbm_h06', num_samples=32768),
+        'fbm_h07': dataset_manager.get_dataset('fbm_h07', num_samples=32768)
     }
     
     print(f"Training on {len(datasets)} datasets:")
@@ -512,13 +527,13 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
     
     # Setup training data
     if dataset_data is not None:
-        train_data = torch.stack([dataset_data[i][0] for i in range(min(256, len(dataset_data)))])
-        test_data = torch.stack([dataset_data[i][0] for i in range(min(64, len(dataset_data)))])
+        train_data = torch.stack([dataset_data[i][0] for i in range(min(32768, len(dataset_data)))])
+        test_data = torch.stack([dataset_data[i][0] for i in range(min(256, len(dataset_data)))])
     else:
         # Fallback to OU process
-        dataset = generative_model.get_signal(num_samples=256)
-        train_data = torch.stack([dataset[i][0] for i in range(256)])
-        test_data = torch.stack([dataset[i][0] for i in range(64)])
+        dataset = generative_model.get_signal(num_samples=32768)
+        train_data = torch.stack([dataset[i][0] for i in range(32768)])
+        test_data = torch.stack([dataset[i][0] for i in range(256)])
     
     print(f"Training: {train_data.shape[0]} samples, batch size varies by model")
     print(f"Test data: {test_data.shape}")
@@ -736,7 +751,7 @@ def train_model_standard(model, model_id: str, checkpoint_manager, train_data: t
     import torch.utils.data as torchdata
     
     # Create data loader
-    batch_size = 32 if model_id.startswith('A') else 16
+    batch_size = 128  # Use consistent batch size of 128 for all models
     dataset = torchdata.TensorDataset(train_data, torch.zeros(train_data.shape[0]))  # dummy labels
     train_loader = torchdata.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
@@ -820,8 +835,8 @@ def main():
             if args.dataset == 'ou_process':
                 train_available_models(args.epochs, args.lr, dataset_name='ou_process', memory_optimized=args.memory_opt, retrain_all=True)
             else:
-                dataset_manager = MultiDatasetManager()
-                dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=256)
+                dataset_manager = MultiDatasetManager(use_persistence=True)
+                dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=32768)
                 train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr, memory_optimized=args.memory_opt, retrain_all=True)
         else:
             # Retrain all models on all datasets
@@ -831,8 +846,8 @@ def main():
         if args.dataset == 'ou_process':
             train_available_models(args.epochs, args.lr, memory_optimized=args.memory_opt)
         else:
-            dataset_manager = MultiDatasetManager()
-            dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=256)
+            dataset_manager = MultiDatasetManager(use_persistence=True)
+            dataset_data = dataset_manager.get_dataset(args.dataset, num_samples=32768)
             train_available_models_on_dataset(args.dataset, dataset_data, args.epochs, args.lr, memory_optimized=args.memory_opt)
     else:
         # Train on all datasets (default behavior)
@@ -856,8 +871,8 @@ def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int
     if dataset_name == 'ou_process':
         train_available_models(epochs, dataset_name='ou_process', memory_optimized=memory_optimized)
     else:
-        dataset_manager = MultiDatasetManager()
-        dataset_data = dataset_manager.get_dataset(dataset_name, num_samples=256)
+        dataset_manager = MultiDatasetManager(use_persistence=True)
+        dataset_data = dataset_manager.get_dataset(dataset_name, num_samples=32768)
         train_available_models_on_dataset(dataset_name, dataset_data, epochs, memory_optimized=memory_optimized)
 
 
