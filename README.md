@@ -25,6 +25,7 @@ A comprehensive comparison of signature-based methods for time series generation
 | **B5_ADV** | Neural SDE | Signature Scoring | Truncated | ⚔️ Adversarial | B5 with adversarial discriminator |
 | **V1** | Latent SDE | ELBO | N/A | 🧠 Latent SDE | TorchSDE with OU process prior + learned posterior |
 | **V2** | Latent SDE | SDE Matching | N/A | 🧠 Latent SDE | Prior/posterior networks with 3-component loss |
+| **C1** | Latent SDE | ELBO + T-Statistic | Truncated | 🔬 Hybrid | V1 Latent SDE + signature T-statistic loss |
 
 ### Key Architecture Components
 
@@ -50,6 +51,7 @@ A comprehensive comparison of signature-based methods for time series generation
 - **Non-Adversarial**: Direct loss optimization
 - **⚔️ Adversarial**: Generator vs discriminator training
 - **🧠 Latent SDE**: Variational inference in latent SDE space
+- **🔬 Hybrid**: Multi-objective training combining SDE and signature losses
 
 ### Quick Reference
 

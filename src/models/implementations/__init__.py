@@ -17,9 +17,16 @@ from .b3_nsde_tstatistic import B3Model, create_b3_model
 from .b4_nsde_mmd import B4Model, create_b4_model
 from .b5_nsde_scoring import B5Model, create_b5_model
 
+# Import hybrid latent SDE models
+try:
+    from .hybrid_latent_sde import C1Model, create_c1_model
+    C1_AVAILABLE = True
+except ImportError:
+    C1_AVAILABLE = False
+
 def get_all_model_creators():
     """Get dictionary of all model creation functions."""
-    return {
+    creators = {
         'A1': create_a1_final_model,
         'A2': create_a2_model,
         'A3': create_a3_model,
@@ -30,6 +37,12 @@ def get_all_model_creators():
         'B4': create_b4_model,
         'B5': create_b5_model
     }
+    
+    # Add hybrid models if available
+    if C1_AVAILABLE:
+        creators['C1'] = create_c1_model
+    
+    return creators
 
 __all__ = [
     'A1FinalModel',
@@ -52,3 +65,7 @@ __all__ = [
     'create_b5_model',
     'get_all_model_creators'
 ]
+
+# Add hybrid models to __all__ if available
+if C1_AVAILABLE:
+    __all__.extend(['C1Model', 'create_c1_model'])

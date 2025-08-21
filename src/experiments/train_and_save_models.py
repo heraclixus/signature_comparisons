@@ -77,6 +77,12 @@ try:
 except ImportError:
     B2_AVAILABLE = False
 
+try:
+    from models.implementations.hybrid_latent_sde.c1_latent_sde_tstat import create_c1_model
+    C1_AVAILABLE = True
+except ImportError:
+    C1_AVAILABLE = False
+
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
@@ -361,6 +367,15 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 print(f"🔄 B2 exists but retraining due to --retrain-all flag")
             models_to_train.append(("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved"))
     
+    # Check C1 (Hybrid Latent SDE + T-Statistic)
+    if C1_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("C1"):
+            print(f"⏭️ C1 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("C1"):
+                print(f"🔄 C1 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("C1", create_c1_model, "Hybrid Latent SDE + T-Statistic"))
+    
     # C1-C3 models removed - not truly generative
     
     if not models_to_train:
@@ -554,7 +569,8 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved", B2_AVAILABLE),
         ("B3", create_b3_model, "Neural SDE + T-Statistic", B3_AVAILABLE),
         ("B4", create_b4_model, "Neural SDE + MMD", B4_AVAILABLE),
-        ("B5", create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE)
+        ("B5", create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE),
+        ("C1", create_c1_model, "Hybrid Latent SDE + T-Statistic", C1_AVAILABLE)
     ]
     
     for model_id, create_fn, description, available in model_configs:
@@ -802,7 +818,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Train and save signature-based models")
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--force", type=str, help="Force retrain specific model")
     parser.add_argument("--retrain-all", action="store_true", help="Force retrain all models (ignores existing checkpoints)")
