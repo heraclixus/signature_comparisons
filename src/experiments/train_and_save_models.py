@@ -116,8 +116,9 @@ except ImportError:
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
-# Global device variable for training
+# Global variables for training
 TRAINING_DEVICE = torch.device('cpu')  # Default, will be set in main()
+TEST_MODE_PARAMS = None  # Will be set in main() based on --test-mode flag
 
 
 class ModelTrainer:
@@ -263,9 +264,25 @@ class ModelTrainer:
         return history
 
 
-def setup_training_data(n_samples: int = 32768, n_points: int = 64, batch_size: int = 128, dataset_name: str = 'ou_process'):
+def setup_training_data(n_samples: int = None, n_points: int = None, batch_size: int = None, dataset_name: str = 'ou_process'):
     """Setup training data for all models using persistence-enabled dataset manager."""
+    # Use test mode parameters if available, otherwise use provided or defaults
+    if TEST_MODE_PARAMS is not None:
+        n_samples = n_samples or TEST_MODE_PARAMS['num_samples']
+        n_points = n_points or TEST_MODE_PARAMS['n_points']
+        batch_size = batch_size or TEST_MODE_PARAMS['batch_size']
+        test_samples = TEST_MODE_PARAMS['test_samples']
+    else:
+        n_samples = n_samples or 32768
+        n_points = n_points or 64
+        batch_size = batch_size or 128
+        test_samples = 256
+    
     print(f"Setting up training data for {dataset_name.upper()}...")
+    print(f"  Samples: {n_samples:,}, Points: {n_points}, Batch: {batch_size}")
+    if TEST_MODE_PARAMS is not None:
+        print(f"  🧪 Test mode: Using small datasets for fast prototyping")
+    
     torch.manual_seed(42)
     np.random.seed(42)
     
@@ -279,8 +296,8 @@ def setup_training_data(n_samples: int = 32768, n_points: int = 64, batch_size: 
         train_loader = torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         
         # Test data for model initialization (signal)  
-        signals_dataset = dataset_manager.get_dataset('ou_process', num_samples=256, n_points=n_points)
-        signals = torch.stack([signals_dataset[i][0] for i in range(min(256, len(signals_dataset)))])
+        signals_dataset = dataset_manager.get_dataset('ou_process', num_samples=test_samples, n_points=n_points)
+        signals = torch.stack([signals_dataset[i][0] for i in range(min(test_samples, len(signals_dataset)))])
         example_batch, _ = next(iter(torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)))
     else:
         # For other datasets, use the dataset manager
@@ -288,8 +305,8 @@ def setup_training_data(n_samples: int = 32768, n_points: int = 64, batch_size: 
         train_loader = torchdata.DataLoader(full_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         
         # Get signals for model initialization
-        signals_dataset = dataset_manager.get_dataset(dataset_name, num_samples=256, n_points=n_points)
-        signals = torch.stack([signals_dataset[i][0] for i in range(min(256, len(signals_dataset)))])
+        signals_dataset = dataset_manager.get_dataset(dataset_name, num_samples=test_samples, n_points=n_points)
+        signals = torch.stack([signals_dataset[i][0] for i in range(min(test_samples, len(signals_dataset)))])
         example_batch, _ = next(iter(torchdata.DataLoader(full_dataset, batch_size=batch_size, shuffle=False)))
     
     print(f"Training: {len(train_loader.dataset)} samples, batch size {batch_size}")
@@ -586,16 +603,19 @@ def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: b
     # Initialize dataset manager with persistence
     dataset_manager = MultiDatasetManager(use_persistence=True)
     
+    # Use test mode parameters if available
+    dataset_samples = TEST_MODE_PARAMS['num_samples'] if TEST_MODE_PARAMS else 32768
+    
     # Get all datasets (they will be loaded from disk if available, generated otherwise)
     datasets = {
         'ou_process': None,  # Use existing OU data generation
-        'heston': dataset_manager.get_dataset('heston', num_samples=32768),
-        'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=32768),
-        'brownian': dataset_manager.get_dataset('brownian', num_samples=32768),
-        'fbm_h03': dataset_manager.get_dataset('fbm_h03', num_samples=32768),
-        'fbm_h04': dataset_manager.get_dataset('fbm_h04', num_samples=32768),
-        'fbm_h06': dataset_manager.get_dataset('fbm_h06', num_samples=32768),
-        'fbm_h07': dataset_manager.get_dataset('fbm_h07', num_samples=32768)
+        'heston': dataset_manager.get_dataset('heston', num_samples=dataset_samples),
+        'rbergomi': dataset_manager.get_dataset('rbergomi', num_samples=dataset_samples),
+        'brownian': dataset_manager.get_dataset('brownian', num_samples=dataset_samples),
+        'fbm_h03': dataset_manager.get_dataset('fbm_h03', num_samples=dataset_samples),
+        'fbm_h04': dataset_manager.get_dataset('fbm_h04', num_samples=dataset_samples),
+        'fbm_h06': dataset_manager.get_dataset('fbm_h06', num_samples=dataset_samples),
+        'fbm_h07': dataset_manager.get_dataset('fbm_h07', num_samples=dataset_samples)
     }
     
     print(f"Training on {len(datasets)} datasets:")
@@ -627,13 +647,19 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
     
     # Setup training data
     if dataset_data is not None:
-        train_data = torch.stack([dataset_data[i][0] for i in range(min(32768, len(dataset_data)))])
-        test_data = torch.stack([dataset_data[i][0] for i in range(min(256, len(dataset_data)))])
+        max_train_samples = TEST_MODE_PARAMS['num_samples'] if TEST_MODE_PARAMS else 32768
+        max_test_samples = TEST_MODE_PARAMS['test_samples'] if TEST_MODE_PARAMS else 256
+        
+        train_data = torch.stack([dataset_data[i][0] for i in range(min(max_train_samples, len(dataset_data)))])
+        test_data = torch.stack([dataset_data[i][0] for i in range(min(max_test_samples, len(dataset_data)))])
     else:
         # Fallback to OU process
-        dataset = generative_model.get_signal(num_samples=32768)
-        train_data = torch.stack([dataset[i][0] for i in range(32768)])
-        test_data = torch.stack([dataset[i][0] for i in range(256)])
+        max_train_samples = TEST_MODE_PARAMS['num_samples'] if TEST_MODE_PARAMS else 32768
+        max_test_samples = TEST_MODE_PARAMS['test_samples'] if TEST_MODE_PARAMS else 256
+        
+        dataset = generative_model.get_signal(num_samples=max_train_samples)
+        train_data = torch.stack([dataset[i][0] for i in range(max_train_samples)])
+        test_data = torch.stack([dataset[i][0] for i in range(max_test_samples)])
     
     print(f"Training: {train_data.shape[0]} samples, batch size varies by model")
     print(f"Test data: {test_data.shape}")
@@ -924,6 +950,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="List available trained models")
     parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
+    parser.add_argument("--test-mode", action="store_true", help="Use small datasets (1000 samples) for fast prototyping and testing")
     
     args = parser.parse_args()
     
@@ -941,6 +968,28 @@ def main():
     # Set global device for training functions
     global TRAINING_DEVICE
     TRAINING_DEVICE = device
+    
+    # Configure test mode
+    if args.test_mode:
+        print(f"🧪 Test Mode Enabled:")
+        print(f"   Using small datasets (1000 samples) for fast prototyping")
+        print(f"   Reduced epochs and batch sizes for quick testing")
+        
+        # Override parameters for test mode
+        global TEST_MODE_PARAMS
+        TEST_MODE_PARAMS = {
+            'num_samples': 1000,
+            'n_points': 64,
+            'batch_size': 32,
+            'test_samples': 64
+        }
+    else:
+        TEST_MODE_PARAMS = {
+            'num_samples': 32768,
+            'n_points': 64, 
+            'batch_size': 128,
+            'test_samples': 256
+        }
     
     if args.list:
         # List models for all datasets

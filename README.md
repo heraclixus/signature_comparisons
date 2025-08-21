@@ -200,14 +200,39 @@ python src/scripts/visualize_datasets.py --list
 #### Non-Adversarial Training
 ```bash
 # Train all models on all datasets (recommended)
-python src/experiments/train_and_save_models.py --epochs 100
+python src/experiments/train_and_save_models.py --epochs 1000
 
 # Train on specific dataset
-python src/experiments/train_and_save_models.py --dataset ou_process --epochs 100
-python src/experiments/train_and_save_models.py --dataset heston --epochs 100
+python src/experiments/train_and_save_models.py --dataset ou_process --epochs 1000
+python src/experiments/train_and_save_models.py --dataset heston --epochs 1000
 
 # Force retrain existing models
-python src/experiments/train_and_save_models.py --retrain-all --epochs 100
+python src/experiments/train_and_save_models.py --retrain-all --epochs 1000
+
+# GPU training (if CUDA available)
+python src/experiments/train_and_save_models.py --device cuda --epochs 1000
+
+# Fast prototyping with small datasets
+python src/experiments/train_and_save_models.py --test-mode --epochs 50
+```
+
+#### Training Options
+```bash
+# Device selection
+--device auto    # Auto-detect best device (default)
+--device cuda    # Force GPU training
+--device cpu     # Force CPU training
+
+# Dataset size options
+--test-mode      # Use 1,000 samples for fast prototyping
+                 # (vs 32,768 samples in normal mode)
+
+# Memory optimization
+--memory-opt     # Enable memory-efficient training for B-type models
+
+# Examples
+python src/experiments/train_and_save_models.py --test-mode --device cpu --epochs 20
+python src/experiments/train_and_save_models.py --device cuda --memory-opt --epochs 1000
 ```
 
 #### Adversarial Training
