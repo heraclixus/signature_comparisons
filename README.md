@@ -27,6 +27,7 @@ A comprehensive comparison of signature-based methods for time series generation
 | **V2** | Latent SDE | SDE Matching | N/A | 🧠 Latent SDE | Prior/posterior networks with 3-component loss |
 | **C1** | Latent SDE | ELBO + T-Statistic | Truncated | 🔬 Hybrid | V1 Latent SDE + signature T-statistic loss |
 | **C2** | Latent SDE | ELBO + Signature Scoring | Truncated | 🔬 Hybrid | V1 Latent SDE + signature scoring loss |
+| **C3** | Latent SDE | ELBO + Signature MMD | Truncated | 🔬 Hybrid | V1 Latent SDE + signature MMD loss |
 
 ### Key Architecture Components
 

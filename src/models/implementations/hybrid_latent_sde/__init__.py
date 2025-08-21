@@ -16,10 +16,13 @@ The hybrid approach aims to leverage the best of both worlds:
 
 from .c1_latent_sde_tstat import C1Model, create_c1_model
 from .c2_latent_sde_scoring import C2Model, create_c2_model
+from .c3_latent_sde_mmd import C3Model, create_c3_model
 
 __all__ = [
     'C1Model',
     'create_c1_model',
     'C2Model', 
-    'create_c2_model'
+    'create_c2_model',
+    'C3Model',
+    'create_c3_model'
 ]
