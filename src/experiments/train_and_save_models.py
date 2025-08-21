@@ -116,6 +116,9 @@ except ImportError:
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
+# Global device variable for training
+TRAINING_DEVICE = torch.device('cpu')  # Default, will be set in main()
+
 
 class ModelTrainer:
     """
@@ -165,6 +168,9 @@ class ModelTrainer:
             
             # Training loop
             for batch_idx, (data, _) in enumerate(train_loader):
+                # Move data to device
+                data = data.to(TRAINING_DEVICE)
+                
                 optimizer.zero_grad()
                 
                 # Forward pass
@@ -475,7 +481,11 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
             torch.manual_seed(12345)
             model = create_fn(example_batch, signals)
             
+            # Move model to training device
+            model = model.to(TRAINING_DEVICE)
+            
             print(f"Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
+            print(f"Model device: {TRAINING_DEVICE}")
             
             # Setup optimizer
             optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -681,7 +691,12 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         try:
             # Create model
             model = create_model_fn(train_data, train_data)
+            
+            # Move model to training device
+            model = model.to(TRAINING_DEVICE)
+            
             print(f"Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
+            print(f"Model device: {TRAINING_DEVICE}")
             
             # Choose training method based on model type and memory optimization flag
             if memory_optimized and model_id.startswith('B'):
@@ -764,7 +779,7 @@ def train_model_memory_optimized(model, model_id: str, checkpoint_manager, train
             if len(batch_indices) == 0:
                 continue
             
-            batch_data = train_data[batch_indices]
+            batch_data = train_data[batch_indices].to(TRAINING_DEVICE)
             
             # Forward pass
             generated_output = model(batch_data)
@@ -846,9 +861,12 @@ def train_model_standard(model, model_id: str, checkpoint_manager, train_data: t
     """Standard training for regular models."""
     import torch.utils.data as torchdata
     
+    # Move training data to device
+    train_data = train_data.to(TRAINING_DEVICE)
+    
     # Create data loader
     batch_size = 128  # Use consistent batch size of 128 for all models
-    dataset = torchdata.TensorDataset(train_data, torch.zeros(train_data.shape[0]))  # dummy labels
+    dataset = torchdata.TensorDataset(train_data, torch.zeros(train_data.shape[0], device=TRAINING_DEVICE))  # dummy labels
     train_loader = torchdata.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
     # Create optimizer
@@ -905,8 +923,24 @@ def main():
     parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian, fbm_h03, fbm_h04, fbm_h06, fbm_h07)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
     parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
     
     args = parser.parse_args()
+    
+    # Configure device
+    if args.device == "auto":
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(args.device)
+    
+    print(f"🖥️ Training Device: {device}")
+    if device.type == 'cuda':
+        print(f"   GPU: {torch.cuda.get_device_name()}")
+        print(f"   Memory: {torch.cuda.get_device_properties(device).total_memory / 1e9:.1f} GB")
+    
+    # Set global device for training functions
+    global TRAINING_DEVICE
+    TRAINING_DEVICE = device
     
     if args.list:
         # List models for all datasets
