@@ -1,0 +1,13 @@
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - Latent SDE logging initialized for training session
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - Log file: results/ou_process_latent_sde/logs/V1_ou_process_latent_sde_training.log
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - Model: V1
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - Dataset: ou_process
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - 🎯 Training Latent SDE Models on ou_process
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Models: ['V1']
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Epochs: 5
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Force retrain: False
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - 🎯 Latent SDE Trainer initialized for ou_process
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Save directory: results/ou_process_latent_sde
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Device: cpu
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO - ⏭️ V1 already trained, skipping...
+2025-08-22 15:26:26 - latent_sde_V1_ou_process - INFO -    Use --force-retrain to retrain existing models

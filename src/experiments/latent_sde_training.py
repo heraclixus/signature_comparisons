@@ -27,6 +27,7 @@ import os
 import sys
 import argparse
 import time
+import logging
 from typing import Dict, List, Tuple, Optional
 
 # Add src to path
@@ -38,10 +39,76 @@ from models.latent_sde.implementations.v1_latent_sde import create_v1_model
 from models.sdematching.implementations.v2_sde_matching import create_v2_model
 
 
+def setup_latent_sde_logging(log_dir: str, model_id: str = None, dataset_name: str = None) -> logging.Logger:
+    """
+    Setup logging for latent SDE training sessions.
+    
+    Args:
+        log_dir: Directory to save log files
+        model_id: Model identifier (e.g., "V1", "V2")
+        dataset_name: Dataset name (e.g., "ou_process", "heston")
+        
+    Returns:
+        Configured logger instance
+    """
+    # Create log directory
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Create log filename
+    if model_id and dataset_name:
+        log_filename = f"{model_id}_{dataset_name}_latent_sde_training.log"
+    elif model_id:
+        log_filename = f"{model_id}_latent_sde_training.log"
+    elif dataset_name:
+        log_filename = f"{dataset_name}_latent_sde_training.log"
+    else:
+        log_filename = "latent_sde_training.log"
+    
+    log_path = os.path.join(log_dir, log_filename)
+    
+    # Create logger
+    logger = logging.getLogger(f"latent_sde_{model_id}_{dataset_name}")
+    logger.setLevel(logging.INFO)
+    
+    # Clear existing handlers to avoid duplicates
+    logger.handlers.clear()
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_path, mode='w')
+    file_handler.setLevel(logging.INFO)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    # Log setup information
+    logger.info(f"Latent SDE logging initialized for training session")
+    logger.info(f"Log file: {log_path}")
+    if model_id:
+        logger.info(f"Model: {model_id}")
+    if dataset_name:
+        logger.info(f"Dataset: {dataset_name}")
+    
+    return logger
+
+
 class LatentSDETrainer:
     """Trainer for latent SDE models using ELBO objective."""
     
-    def __init__(self, dataset_name: str = 'ou_process', save_dir: str = None, device: torch.device = None):
+    def __init__(self, dataset_name: str = 'ou_process', save_dir: str = None, device: torch.device = None, logger: logging.Logger = None):
         """
         Initialize latent SDE trainer.
         
@@ -49,10 +116,12 @@ class LatentSDETrainer:
             dataset_name: Name of dataset to train on
             save_dir: Directory to save results
             device: Device to use for training
+            logger: Logger instance for training logs
         """
         self.dataset_name = dataset_name
         self.save_dir = save_dir or f'results/{dataset_name}_latent_sde'
         self.device = device or torch.device('cpu')
+        self.logger = logger or logging.getLogger(__name__)
         
         # Create checkpoint manager
         self.checkpoint_manager = create_checkpoint_manager(self.save_dir)
@@ -60,18 +129,18 @@ class LatentSDETrainer:
         # Setup dataset
         self.dataset_manager = MultiDatasetManager()
         
-        print(f"🎯 Latent SDE Trainer initialized for {dataset_name}")
-        print(f"   Save directory: {self.save_dir}")
-        print(f"   Device: {self.device}")
+        self.logger.info(f"🎯 Latent SDE Trainer initialized for {dataset_name}")
+        self.logger.info(f"   Save directory: {self.save_dir}")
+        self.logger.info(f"   Device: {self.device}")
     
     def setup_training_data(self, num_samples: int = 1000, batch_size: int = 32, test_mode: bool = False):
         """Setup training data for the specified dataset."""
-        print(f"\n📊 Setting up training data for {self.dataset_name}...")
+        self.logger.info(f"\n📊 Setting up training data for {self.dataset_name}...")
         
         # Adjust sample size for test mode
         if test_mode:
             num_samples = min(num_samples, 1000)
-            print(f"   🧪 Test mode: Using {num_samples} samples")
+            self.logger.info(f"   🧪 Test mode: Using {num_samples} samples")
         
         # Get dataset
         dataset = self.dataset_manager.get_dataset(self.dataset_name, num_samples=num_samples)
@@ -88,9 +157,9 @@ class LatentSDETrainer:
         if isinstance(example_batch, (list, tuple)):
             example_batch = example_batch[0]  # Extract tensor from tuple/list
         
-        print(f"   Dataset: {len(dataset)} samples")
-        print(f"   Batch size: {batch_size}")
-        print(f"   Example batch shape: {example_batch.shape}")
+        self.logger.info(f"   Dataset: {len(dataset)} samples")
+        self.logger.info(f"   Batch size: {batch_size}")
+        self.logger.info(f"   Example batch shape: {example_batch.shape}")
         
         return train_loader, example_batch
     
@@ -115,14 +184,14 @@ class LatentSDETrainer:
         Returns:
             Training history dictionary
         """
-        print(f"\n{'='*60}")
-        print(f"🎯 Training {model_id} Latent SDE Model")
-        print(f"{'='*60}")
-        print(f"Dataset: {self.dataset_name}")
-        print(f"Epochs: {num_epochs}")
-        print(f"Learning rate: {learning_rate}")
-        print(f"Latent dimension: {latent_dim}")
-        print(f"KL weight: {kl_weight}")
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info(f"🎯 Training {model_id} Latent SDE Model")
+        self.logger.info(f"{'='*60}")
+        self.logger.info(f"Dataset: {self.dataset_name}")
+        self.logger.info(f"Epochs: {num_epochs}")
+        self.logger.info(f"Learning rate: {learning_rate}")
+        self.logger.info(f"Latent dimension: {latent_dim}")
+        self.logger.info(f"KL weight: {kl_weight}")
         
         # Use provided device or fall back to trainer's device
         device = device or self.device
@@ -145,7 +214,7 @@ class LatentSDETrainer:
         real_data = torch.cat(real_data_samples, dim=0)
         
         # Create model
-        print(f"\n🏗️ Creating {model_id} model...")
+        self.logger.info(f"\n🏗️ Creating {model_id} model...")
         
         # Move data to device for model initialization
         example_batch = example_batch.to(device)
@@ -184,14 +253,14 @@ class LatentSDETrainer:
         
         # Move model to device
         model = model.to(device)
-        print(f"✅ Model created and moved to {device}")
-        print(f"   Parameters: {sum(p.numel() for p in model.parameters()):,}")
+        self.logger.info(f"✅ Model created and moved to {device}")
+        self.logger.info(f"   Parameters: {sum(p.numel() for p in model.parameters()):,}")
         
         # Setup optimizer
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         
         # Training loop
-        print(f"\n🚀 Starting training...")
+        self.logger.info(f"\n🚀 Starting training...")
         training_history = {
             'epoch': [],
             'losses': [],  # Changed from 'total_loss' to match checkpoint manager format
@@ -238,11 +307,11 @@ class LatentSDETrainer:
                     epoch_kl_losses.append(components['kl_loss'])
                     
                 except Exception as e:
-                    print(f"   ❌ Training step failed at epoch {epoch+1}, batch {batch_idx}: {e}")
+                    self.logger.error(f"   ❌ Training step failed at epoch {epoch+1}, batch {batch_idx}: {e}")
                     continue
             
             if not epoch_losses:
-                print(f"   ❌ No successful training steps in epoch {epoch+1}")
+                self.logger.error(f"   ❌ No successful training steps in epoch {epoch+1}")
                 continue
             
             # Compute epoch averages
@@ -262,7 +331,7 @@ class LatentSDETrainer:
             
             # Print progress
             if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == num_epochs - 1:
-                print(f"   Epoch {epoch+1:3d}/{num_epochs}: "
+                self.logger.info(f"   Epoch {epoch+1:3d}/{num_epochs}: "
                       f"Loss={avg_total_loss:.4f} "
                       f"(Recon={avg_recon_loss:.4f}, KL={avg_kl_loss:.4f}) "
                       f"Time={epoch_time:.1f}s")
@@ -280,21 +349,21 @@ class LatentSDETrainer:
             # Save checkpoint periodically
             if (epoch + 1) % save_every == 0:
                 self._save_latent_sde_model(model, model_id, epoch + 1, avg_total_loss, training_history)
-                print(f"   💾 Checkpoint saved at epoch {epoch + 1}")
+                self.logger.info(f"   💾 Checkpoint saved at epoch {epoch + 1}")
             
             # Early stopping
             if patience_counter >= patience:
-                print(f"   🛑 Early stopping at epoch {epoch + 1} (patience: {patience})")
+                self.logger.info(f"   🛑 Early stopping at epoch {epoch + 1} (patience: {patience})")
                 break
         
         # Final save
         self._save_latent_sde_model(model, model_id, epoch + 1, final_loss, training_history)
         
-        print(f"\n✅ Training complete!")
-        print(f"   Best loss: {best_loss:.4f}")
-        print(f"   Final epoch: {epoch + 1}")
-        print(f"   Total epochs with losses: {len(training_history['losses'])}")
-        print(f"   Model saved to: {self.save_dir}/trained_models/{model_id}/")
+        self.logger.info(f"\n✅ Training complete!")
+        self.logger.info(f"   Best loss: {best_loss:.4f}")
+        self.logger.info(f"   Final epoch: {epoch + 1}")
+        self.logger.info(f"   Total epochs with losses: {len(training_history['losses'])}")
+        self.logger.info(f"   Model saved to: {self.save_dir}/trained_models/{model_id}/")
         
         return training_history
     
@@ -391,12 +460,22 @@ def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
     Returns:
         Dictionary of training results
     """
-    print(f"🎯 Training Latent SDE Models on {dataset_name}")
-    print(f"   Models: {models}")
-    print(f"   Epochs: {num_epochs}")
-    print(f"   Force retrain: {force_retrain}")
+    # Setup logging for single model training (when only one model specified)
+    logger = None
+    if len(models) == 1:
+        log_dir = os.path.join(f'results/{dataset_name}_latent_sde', 'logs')
+        logger = setup_latent_sde_logging(log_dir, models[0], dataset_name)
+        logger.info(f"🎯 Training Latent SDE Models on {dataset_name}")
+        logger.info(f"   Models: {models}")
+        logger.info(f"   Epochs: {num_epochs}")
+        logger.info(f"   Force retrain: {force_retrain}")
+    else:
+        print(f"🎯 Training Latent SDE Models on {dataset_name}")
+        print(f"   Models: {models}")
+        print(f"   Epochs: {num_epochs}")
+        print(f"   Force retrain: {force_retrain}")
     
-    trainer = LatentSDETrainer(dataset_name, device=device)
+    trainer = LatentSDETrainer(dataset_name, device=device, logger=logger)
     results = {}
     
     for model_id in models:
@@ -406,12 +485,19 @@ def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
         
         # Check if model already exists
         if not force_retrain and trainer.checkpoint_manager.model_exists(model_id):
-            print(f"⏭️ {model_id} already trained, skipping...")
-            print(f"   Use --force-retrain to retrain existing models")
+            if logger:
+                logger.info(f"⏭️ {model_id} already trained, skipping...")
+                logger.info(f"   Use --force-retrain to retrain existing models")
+            else:
+                print(f"⏭️ {model_id} already trained, skipping...")
+                print(f"   Use --force-retrain to retrain existing models")
             continue
         
         if force_retrain and trainer.checkpoint_manager.model_exists(model_id):
-            print(f"🔄 {model_id} exists but retraining due to --force-retrain flag")
+            if logger:
+                logger.info(f"🔄 {model_id} exists but retraining due to --force-retrain flag")
+            else:
+                print(f"🔄 {model_id} exists but retraining due to --force-retrain flag")
         
         try:
             # Train model
@@ -428,10 +514,17 @@ def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
                 'history': history
             }
             
-            print(f"✅ {model_id} training completed successfully")
+            if logger:
+                logger.info(f"✅ {model_id} training completed successfully")
+            else:
+                print(f"✅ {model_id} training completed successfully")
             
         except Exception as e:
-            print(f"❌ Training failed for {model_id}: {e}")
+            if logger:
+                logger.error(f"❌ Training failed for {model_id}: {e}")
+                logger.error("Exception details:", exc_info=True)
+            else:
+                print(f"❌ Training failed for {model_id}: {e}")
             results[model_id] = {
                 'status': 'failed',
                 'error': str(e),

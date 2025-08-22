@@ -13,6 +13,7 @@ import pandas as pd
 import time
 import sys
 import os
+import logging
 from typing import Dict, Any, List, Tuple
 
 # Add src to path
@@ -133,6 +134,73 @@ except ImportError as e:
 # Global variables for training
 TRAINING_DEVICE = torch.device('cpu')  # Default, will be set in main()
 TEST_MODE_PARAMS = None  # Will be set in main() based on --test-mode flag
+
+
+def setup_logging(log_dir: str, model_id: str = None, dataset_name: str = None) -> logging.Logger:
+    """
+    Setup logging for training sessions.
+    
+    Args:
+        log_dir: Directory to save log files
+        model_id: Model identifier (e.g., "A1", "B2")
+        dataset_name: Dataset name (e.g., "ou_process", "heston")
+        
+    Returns:
+        Configured logger instance
+    """
+    # Create log directory
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Create log filename
+    if model_id and dataset_name:
+        log_filename = f"{model_id}_{dataset_name}_training.log"
+    elif model_id:
+        log_filename = f"{model_id}_training.log"
+    elif dataset_name:
+        log_filename = f"{dataset_name}_training.log"
+    else:
+        log_filename = "training.log"
+    
+    log_path = os.path.join(log_dir, log_filename)
+    
+    # Create logger
+    logger = logging.getLogger(f"training_{model_id}_{dataset_name}")
+    logger.setLevel(logging.INFO)
+    
+    # Clear existing handlers to avoid duplicates
+    logger.handlers.clear()
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_path, mode='w')
+    file_handler.setLevel(logging.INFO)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    # Log setup information
+    logger.info(f"Logging initialized for training session")
+    logger.info(f"Log file: {log_path}")
+    if model_id:
+        logger.info(f"Model: {model_id}")
+    if dataset_name:
+        logger.info(f"Dataset: {dataset_name}")
+    logger.info(f"Training device: {TRAINING_DEVICE}")
+    
+    return logger
 
 
 class ModelTrainer:
@@ -281,6 +349,46 @@ class ModelTrainer:
         
         self.training_history[model_id] = history
         return history
+
+
+class LoggingModelTrainer(ModelTrainer):
+    """
+    Enhanced model trainer with logging support.
+    """
+    
+    def __init__(self, checkpoint_manager, logger: logging.Logger = None):
+        """Initialize trainer with checkpoint manager and logger."""
+        super().__init__(checkpoint_manager)
+        self.logger = logger or logging.getLogger(__name__)
+    
+    def train_with_checkpointing(self, model, model_id: str, train_loader, 
+                               optimizer, num_epochs: int, 
+                               save_every: int = 20, patience: int = 10):
+        """
+        Train model with automatic checkpointing and logging.
+        """
+        self.logger.info(f"Starting training for {model_id}")
+        self.logger.info(f"Configuration: epochs={num_epochs}, save_every={save_every}, patience={patience}")
+        self.logger.info(f"Optimizer: {type(optimizer).__name__}, lr={optimizer.param_groups[0]['lr']}")
+        self.logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+        
+        try:
+            # Call parent method
+            history = super().train_with_checkpointing(
+                model, model_id, train_loader, optimizer, num_epochs, save_every, patience
+            )
+            
+            self.logger.info(f"Training completed successfully for {model_id}")
+            self.logger.info(f"Best loss: {history['best_loss']:.6f} at epoch {history['best_epoch']}")
+            self.logger.info(f"Final loss: {history['final_loss']:.6f}")
+            self.logger.info(f"Total training time: {history['total_time']:.2f}s")
+            
+            return history
+            
+        except Exception as e:
+            self.logger.error(f"Training failed for {model_id}: {str(e)}")
+            self.logger.error(f"Exception details:", exc_info=True)
+            raise
 
 
 def setup_training_data(n_samples: int = None, n_points: int = None, batch_size: int = None, dataset_name: str = 'ou_process'):
@@ -1112,14 +1220,19 @@ def main():
 def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: int = 100, 
                       lr: float = 0.001, memory_optimized: bool = False, retrain: bool = False):
     """Train a single specific model on a dataset."""
-    print(f"🎯 Training Single Model: {model_id}")
-    print(f"   Dataset: {dataset_name}")
-    print(f"   Epochs: {epochs}")
+    # Setup logging for single model training
+    log_dir = os.path.join(f'results/{dataset_name}', 'logs')
+    logger = setup_logging(log_dir, model_id, dataset_name)
+    
+    logger.info(f"🎯 Training Single Model: {model_id}")
+    logger.info(f"   Dataset: {dataset_name}")
+    logger.info(f"   Epochs: {epochs}")
+    logger.info(f"   Learning rate: {lr}")
     if memory_optimized:
-        print("   🧠 Memory optimization enabled")
+        logger.info("   🧠 Memory optimization enabled")
     if retrain:
-        print("   🔄 Force retrain mode")
-    print("=" * 50)
+        logger.info("   🔄 Force retrain mode")
+    logger.info("=" * 50)
     
     # Get model configuration
     model_configs = {
@@ -1142,40 +1255,39 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
     }
     
     if model_id not in model_configs:
-        print(f"❌ Unknown model ID: {model_id}")
-        print(f"Available models: {list(model_configs.keys())}")
+        logger.error(f"❌ Unknown model ID: {model_id}")
+        logger.error(f"Available models: {list(model_configs.keys())}")
         return False
     
     create_fn, description, available = model_configs[model_id]
     
     if not available:
-        print(f"❌ Model {model_id} is not available (import failed)")
-        print(f"Debug info: D1_AVAILABLE = {D1_AVAILABLE}")
+        logger.error(f"❌ Model {model_id} is not available (import failed)")
+        logger.error(f"Debug info: D1_AVAILABLE = {D1_AVAILABLE}")
         if model_id == "D1":
-            print("Attempting to re-import D1 model for debugging...")
+            logger.info("Attempting to re-import D1 model for debugging...")
             try:
                 from models.implementations.d1_diffusion import create_d1_model as debug_d1
-                print("✅ D1 re-import successful!")
-                print(f"Function location: {debug_d1.__module__}")
+                logger.info("✅ D1 re-import successful!")
+                logger.info(f"Function location: {debug_d1.__module__}")
             except Exception as debug_e:
-                print(f"❌ D1 re-import failed: {debug_e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"❌ D1 re-import failed: {debug_e}")
+                logger.error("Exception details:", exc_info=True)
         return False
     
-    print(f"📋 Model: {model_id} ({description})")
+    logger.info(f"📋 Model: {model_id} ({description})")
     
     # Setup checkpoint manager
     checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
     
     # Check if model already exists
     if not retrain and checkpoint_manager.model_exists(model_id):
-        print(f"⏭️ {model_id} already trained on {dataset_name}")
-        print(f"   Use --retrain-all or --force to retrain")
+        logger.info(f"⏭️ {model_id} already trained on {dataset_name}")
+        logger.info(f"   Use --retrain-all or --force to retrain")
         return True
     
     if retrain and checkpoint_manager.model_exists(model_id):
-        print(f"🔄 {model_id} exists but retraining due to retrain flag")
+        logger.info(f"🔄 {model_id} exists but retraining due to retrain flag")
     
     # Setup training data
     try:
@@ -1197,43 +1309,44 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
             dataset_tensor = torch.utils.data.TensorDataset(train_data, torch.zeros(train_data.shape[0]))
             train_loader = torch.utils.data.DataLoader(dataset_tensor, batch_size=batch_size, shuffle=True)
             
-            print(f"Training: {train_data.shape[0]} samples, batch size {batch_size}")
-            print(f"Test data: {signals.shape}")
+            logger.info(f"Training: {train_data.shape[0]} samples, batch size {batch_size}")
+            logger.info(f"Test data: {signals.shape}")
     
     except Exception as e:
-        print(f"❌ Failed to setup training data: {e}")
+        logger.error(f"❌ Failed to setup training data: {e}")
+        logger.error("Exception details:", exc_info=True)
         return False
     
     # Create and train model
     try:
-        print(f"\n🏗️ Creating {model_id} model...")
+        logger.info(f"\n🏗️ Creating {model_id} model...")
         torch.manual_seed(12345)  # Consistent seed
         model = create_fn(example_batch, signals)
         
         # Move model to training device
         model = model.to(TRAINING_DEVICE)
         
-        print(f"✅ Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
-        print(f"   Model device: {TRAINING_DEVICE}")
+        logger.info(f"✅ Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
+        logger.info(f"   Model device: {TRAINING_DEVICE}")
         
-        # Setup trainer
-        trainer = ModelTrainer(checkpoint_manager)
+        # Setup trainer with logging
+        trainer = LoggingModelTrainer(checkpoint_manager, logger)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         
-        print(f"\n🚀 Starting training...")
+        logger.info(f"\n🚀 Starting training...")
         
         # Choose training method
         if memory_optimized and model_id.startswith('B'):
-            print(f"🧠 Using memory-optimized training for {model_id}")
+            logger.info(f"🧠 Using memory-optimized training for {model_id}")
             train_data = signals if dataset_name == 'ou_process' else train_data
             success, best_loss, best_epoch = train_model_memory_optimized(
                 model, model_id, checkpoint_manager, train_data, epochs
             )
             if success:
-                print(f"✅ {model_id} training completed!")
-                print(f"   Best loss: {best_loss:.6f} at epoch {best_epoch}")
+                logger.info(f"✅ {model_id} training completed!")
+                logger.info(f"   Best loss: {best_loss:.6f} at epoch {best_epoch}")
             else:
-                print(f"❌ {model_id} training failed")
+                logger.error(f"❌ {model_id} training failed")
         else:
             # Standard training with checkpointing
             history = trainer.train_with_checkpointing(
@@ -1246,17 +1359,16 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
                 patience=10
             )
             
-            print(f"✅ {model_id} training completed!")
-            print(f"   Best loss: {history['best_loss']:.6f} at epoch {history['best_epoch']}")
-            print(f"   Final loss: {history['final_loss']:.6f}")
-            print(f"   Total time: {history['total_time']:.2f}s")
+            logger.info(f"✅ {model_id} training completed!")
+            logger.info(f"   Best loss: {history['best_loss']:.6f} at epoch {history['best_epoch']}")
+            logger.info(f"   Final loss: {history['final_loss']:.6f}")
+            logger.info(f"   Total time: {history['total_time']:.2f}s")
         
         return True
         
     except Exception as e:
-        print(f"❌ Training failed for {model_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Training failed for {model_id}: {e}")
+        logger.error("Exception details:", exc_info=True)
         return False
 
 
