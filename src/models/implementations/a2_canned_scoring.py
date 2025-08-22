@@ -132,6 +132,9 @@ class A2Model(BaseSignatureModel):
             example_batch: Example input for model initialization
         """
         if not self.is_model_initialized:
+            # Ensure example batch is on correct device for initialization
+            example_batch = example_batch.to(self.device)
+            
             # Initialize the generator (this sets up all parameters)
             _ = self.generator(example_batch)
             self.is_model_initialized = True
@@ -151,10 +154,14 @@ class A2Model(BaseSignatureModel):
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
         
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
         # Create signature scoring loss
         self.loss_function = SignatureScoringLoss(
             signature_transform=self.signature_transform,
             real_paths=real_paths,
+            device=self.device,  # Pass device to loss function
             **self.config.loss_config
         )
         self.is_loss_initialized = True
@@ -231,7 +238,7 @@ class SignatureScoringLoss:
     def __init__(self, signature_transform, real_paths: torch.Tensor,
                  kernel_type: str = 'rbf', sigma: float = 1.0,
                  adversarial: bool = False, max_batch: int = 128, 
-                 path_dim: int = 2, **kwargs):
+                 path_dim: int = 2, device: torch.device = None, **kwargs):
         """
         Initialize signature scoring loss.
         
@@ -243,43 +250,69 @@ class SignatureScoringLoss:
             adversarial: Whether to use learnable scaling (False for A2)
             max_batch: Maximum batch size for computation
             path_dim: Path dimension for scaling parameters
+            device: Device to place tensors on
         """
         self.signature_transform = signature_transform
         self.kernel_type = kernel_type
         self.sigma = sigma
         self.adversarial = adversarial
         self.max_batch = max_batch
+        self.device = device or torch.device('cpu')
+        
+        # Ensure real paths are on correct device before signature computation
+        real_paths = real_paths.to(self.device)
         
         # Precompute real path signatures
         self.real_signatures = self._compute_signatures(real_paths)
         
         # Adversarial scaling parameters (not used in A2 since adversarial=False)
         if adversarial:
-            self._sigma = nn.Parameter(torch.ones(path_dim), requires_grad=True)
+            self._sigma = nn.Parameter(torch.ones(path_dim, device=self.device), requires_grad=True)
         else:
             self._sigma = None
+        
+        # Store device for gradient computation
+        self.real_signatures = self.real_signatures.detach()  # Detach real signatures from computation graph
         
         print(f"Signature scoring loss created: {kernel_type} kernel, sigma={sigma}")
     
     def _compute_signatures(self, paths: torch.Tensor) -> torch.Tensor:
         """Compute signatures for paths."""
         try:
+            # Ensure paths are on correct device
+            paths = paths.to(self.device)
+            
             # Ensure proper format for signature computation
             if len(paths.shape) == 3:
                 # Already in (batch, channels, length) format
-                return self.signature_transform(paths)
+                signatures = self.signature_transform(paths)
             elif len(paths.shape) == 2:
                 # Add channel dimension
                 paths_3d = paths.unsqueeze(1)
-                return self.signature_transform(paths_3d)
+                signatures = self.signature_transform(paths_3d)
             else:
                 raise ValueError(f"Unexpected path shape: {paths.shape}")
+            
+            # Ensure signatures are on correct device and flatten for kernel computation
+            signatures = signatures.to(self.device)
+            if len(signatures.shape) > 2:
+                signatures = signatures.view(signatures.size(0), -1)
+            
+            return signatures
         except Exception as e:
             warnings.warn(f"Signature computation failed: {e}. Using path directly.")
-            return paths.view(paths.size(0), -1)  # Flatten as fallback
+            flattened = paths.view(paths.size(0), -1).to(self.device)
+            # Ensure gradient flow for fallback
+            if paths.requires_grad:
+                flattened = flattened.requires_grad_(True)
+            return flattened
     
     def _rbf_kernel(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """Compute RBF kernel between signature features."""
+        # Ensure tensors are on correct device
+        x = x.to(self.device)
+        y = y.to(self.device)
+        
         # Ensure 2D tensors
         if len(x.shape) > 2:
             x = x.view(x.size(0), -1)
@@ -297,6 +330,10 @@ class SignatureScoringLoss:
     
     def _linear_kernel(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """Compute linear kernel between signature features."""
+        # Ensure tensors are on correct device
+        x = x.to(self.device)
+        y = y.to(self.device)
+        
         if len(x.shape) > 2:
             x = x.view(x.size(0), -1)
         if len(y.shape) > 2:
@@ -314,6 +351,9 @@ class SignatureScoringLoss:
         Returns:
             Signature scoring rule loss
         """
+        # Ensure generated paths are on correct device
+        generated_paths = generated_paths.to(self.device)
+        
         # Convert generated paths to proper format and compute signatures
         generated_paths_formatted = self._format_generated_paths(generated_paths)
         generated_signatures = self._compute_signatures(generated_paths_formatted)
@@ -344,16 +384,19 @@ class SignatureScoringLoss:
     
     def _format_generated_paths(self, generated_paths: torch.Tensor) -> torch.Tensor:
         """Format generated paths for signature computation."""
+        # Ensure paths are on correct device
+        generated_paths = generated_paths.to(self.device)
+        
         if len(generated_paths.shape) == 2:
             # Add time dimension to match original format
             batch_size, path_length = generated_paths.shape
             
-            # Create time coordinates
-            time_coords = torch.linspace(0, 1, path_length + 1, device=generated_paths.device)
+            # Create time coordinates on the correct device
+            time_coords = torch.linspace(0, 1, path_length + 1, device=self.device)
             time_coords = time_coords.unsqueeze(0).expand(batch_size, -1)
             
             # Add initial point (0) and create full path
-            initial_points = torch.zeros(batch_size, 1, device=generated_paths.device)
+            initial_points = torch.zeros(batch_size, 1, device=self.device)
             full_values = torch.cat([initial_points, generated_paths], dim=1)
             
             # Stack time and value coordinates
@@ -361,8 +404,8 @@ class SignatureScoringLoss:
             
             return paths_3d
         elif len(generated_paths.shape) == 3:
-            # Already in proper format
-            return generated_paths
+            # Already in proper format, ensure on correct device
+            return generated_paths.to(self.device)
         else:
             raise ValueError(f"Unexpected generated paths shape: {generated_paths.shape}")
     
