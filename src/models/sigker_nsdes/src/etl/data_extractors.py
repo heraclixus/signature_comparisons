@@ -3,8 +3,8 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.utils.helper_functions.global_helper_functions import get_project_root
-from src.utils.helper_functions.data_helper_functions import strided_app
+from models.sigker_nsdes.src.utils.helper_functions.global_helper_functions import get_project_root
+from models.sigker_nsdes.src.utils.helper_functions.data_helper_functions import strided_app
 
 
 def get_set_snp_constituents_table(overwrite=False):

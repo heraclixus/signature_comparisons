@@ -3,8 +3,8 @@ import torchcde
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.utils.helper_functions.data_helper_functions import subtract_initial_point
-from src.utils.helper_functions.plot_helper_functions import make_grid
+from models.sigker_nsdes.src.utils.helper_functions.data_helper_functions import subtract_initial_point
+from models.sigker_nsdes.src.utils.helper_functions.plot_helper_functions import make_grid
 
 
 def plot_loss(loss: torch.tensor, figsize=(10, 5)):

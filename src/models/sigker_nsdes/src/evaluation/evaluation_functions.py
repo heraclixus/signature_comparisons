@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from scipy.stats import ks_2samp
 
-from src.utils.helper_functions.data_helper_functions import subtract_initial_point
+from models.sigker_nsdes.src.utils.helper_functions.data_helper_functions import subtract_initial_point
 
 
 def get_ccor_matrix(paths, lags=(0, 1, 2, 3, 4, 5, 6)):

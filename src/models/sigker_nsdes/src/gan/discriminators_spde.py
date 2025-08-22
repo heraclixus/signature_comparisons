@@ -4,8 +4,8 @@ import sigkernel
 import torchcde
 import torch
 
-from src.gan.base import MLP
-from src.gan.discriminators import KernelDiscriminator
+from models.sigker_nsdes.src.gan.base import MLP
+from models.sigker_nsdes.src.gan.discriminators import KernelDiscriminator
 
 
 STATIC_KERNELS = {

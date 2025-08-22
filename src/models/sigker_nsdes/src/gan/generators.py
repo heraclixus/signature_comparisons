@@ -2,8 +2,8 @@ import torch
 import torchsde
 import torchcde
 
-from src.gan.base import MLP
-from src.gan.signature_utils import signature, logsignature, all_words, lyndon_words
+from models.sigker_nsdes.src.gan.base import MLP
+from models.sigker_nsdes.src.gan.signature_utils import signature, logsignature, all_words, lyndon_words
 
 
 class GeneratorFunc(torch.nn.Module):

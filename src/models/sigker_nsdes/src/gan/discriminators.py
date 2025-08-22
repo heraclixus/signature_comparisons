@@ -4,8 +4,8 @@ import sigkernel
 import torchcde
 import torch
 
-from src.gan.base import MLP
-from src.gan.signature_utils import signature
+from models.sigker_nsdes.src.gan.base import MLP
+from models.sigker_nsdes.src.gan.signature_utils import signature
 
 
 class SummedKernel(object):
