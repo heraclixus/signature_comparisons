@@ -157,6 +157,9 @@ class V2SDEMatchingModel(BaseSignatureModel):
         with torch.no_grad():
             # 1. Sample initial latent state from prior
             z0 = self.p_init_distr().rsample([batch_size])[:, 0]  # (batch, latent_size)
+            # Get device from model parameters
+            device = next(self.parameters()).device
+            z0 = z0.to(device)
             
             # 2. Solve prior SDE in latent space
             zs = solve_sde(self.p_sde, z0, 0., T, n_steps=time_steps-1)  # (time_steps, batch, latent_size)
@@ -168,7 +171,7 @@ class V2SDEMatchingModel(BaseSignatureModel):
             
             # 4. Format output to match our interface
             # Convert from (time_steps, batch, data_size) to (batch, 2, time_steps)
-            ts = torch.linspace(0, T, time_steps, device=batch.device)
+            ts = torch.linspace(0, T, time_steps, device=device)
             time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
             value_channel = xs.permute(1, 2, 0)  # (batch, data_size, time_steps)
             
@@ -232,12 +235,12 @@ class V2SDEMatchingModel(BaseSignatureModel):
         loss_prior = self.sde_matching.loss_prior(ctx).mean()
         
         # Random time for diffusion loss
-        t = torch.rand(batch_size, 1) * (ts[:, -1] - ts[:, 0]) + ts[:, 0]
+        t = torch.rand(batch_size, 1, device=batch.device) * (ts[:, -1] - ts[:, 0]) + ts[:, 0]
         loss_diff = self.sde_matching.loss_diff(ctx, t).mean()
         
         # Random observation for reconstruction loss
-        rng = torch.arange(batch_size)
-        u = torch.randint(time_steps, [batch_size])
+        rng = torch.arange(batch_size, device=batch.device)
+        u = torch.randint(time_steps, [batch_size], device=batch.device)
         t_u = ts[rng, u]
         x_u = xs[rng, u]
         loss_recon = self.sde_matching.loss_recon(ctx, x_u, t_u).mean()

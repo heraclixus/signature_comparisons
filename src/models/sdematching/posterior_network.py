@@ -31,7 +31,7 @@ class PosteriorAffine(nn.Module):
         l = ctx.shape[1] - 1
 
         h, out = ctx[:, 0], ctx[:, 1:]
-        ts = torch.linspace(0, 1, l)[None, :]
+        ts = torch.linspace(0, 1, l, device=ctx.device)[None, :]
         c = self.sm(-(l * (ts - t)) ** 2)
         out = (out * c[:, :, None]).sum(dim=1)
         ctx_t = torch.cat([h + out, t], dim=1)

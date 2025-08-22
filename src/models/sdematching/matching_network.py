@@ -25,7 +25,7 @@ class MatchingSDE(nn.Module):
     def loss_prior(self, ctx: Tensor) -> Tensor:
         bs = ctx.shape[0]
 
-        t0 = torch.zeros(bs, 1)
+        t0 = torch.zeros(bs, 1, device=ctx.device)
 
         m0, s0 = self.q_affine(ctx, t0)
         q_z0 = D.Independent(D.Normal(m0, s0), 1)
@@ -80,13 +80,13 @@ class MatchingSDE(nn.Module):
         loss_prior = self.loss_prior(ctx)
 
         # diffusion loss
-        t = torch.rand(bs, 1) * (ts[:, -1] - ts[:, 0]) + ts[:, 0]
+        t = torch.rand(bs, 1, device=ts.device) * (ts[:, -1] - ts[:, 0]) + ts[:, 0]
 
         loss_diff = self.loss_diff(ctx, t)
 
         # reconstruction loss
-        rng = torch.arange(bs)
-        u = torch.randint(n, [bs])
+        rng = torch.arange(bs, device=ts.device)
+        u = torch.randint(n, [bs], device=ts.device)
         t_u = ts[rng, u]
         x_u = xs[rng, u]
 
