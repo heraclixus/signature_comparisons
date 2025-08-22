@@ -109,11 +109,15 @@ class A3Model(BaseSignatureModel):
             # Create generator using the same method as A1/A2
             self.generator = create_generative_model()
             
-            # Initialize the generator (this sets up all parameters)
-            _ = self.generator(example_batch)
+            # For CannedNet initialization, we need to use CPU tensors first
+            # then move the entire model to device after initialization
+            example_batch_cpu = example_batch.cpu()
+            
+            # Initialize the generator (this sets up all parameters on CPU)
+            _ = self.generator(example_batch_cpu)
             self.is_model_initialized = True
             
-            # Now move to device after initialization
+            # Now move entire model to target device after initialization
             self.to(self.device)
             
             print(f"A3 model initialized: {sum(p.numel() for p in self.parameters()):,} parameters")
@@ -127,6 +131,9 @@ class A3Model(BaseSignatureModel):
         """
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
+        
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
         
         # Create signature kernel for MMD
         try:
@@ -143,7 +150,8 @@ class A3Model(BaseSignatureModel):
                 signature_kernel=signature_kernel,
                 max_batch=self.config.loss_config.get('max_batch', 128),
                 adversarial=self.config.loss_config.get('adversarial', False),
-                path_dim=real_paths.shape[1]
+                path_dim=real_paths.shape[1],
+                device=self.device
             )
             
             print(f"MMD loss created with sigkernel: RBF kernel, sigma={sigma}")
@@ -159,7 +167,8 @@ class A3Model(BaseSignatureModel):
             
             self.mmd_loss = SimplifiedMMDLoss(
                 signature_transform=self.signature_transform,
-                sigma=self.config.loss_config.get('sigma', 1.0)
+                sigma=self.config.loss_config.get('sigma', 1.0),
+                device=self.device
             )
             
             print(f"MMD loss created with simplified implementation: sigma={self.config.loss_config.get('sigma', 1.0)}")
@@ -258,16 +267,18 @@ class SimplifiedMMDLoss:
     Simplified MMD loss using signature features when sigkernel is not available.
     """
     
-    def __init__(self, signature_transform, sigma: float = 1.0):
+    def __init__(self, signature_transform, sigma: float = 1.0, device: torch.device = None):
         """
         Initialize simplified MMD loss.
         
         Args:
             signature_transform: Signature transform to use
             sigma: RBF kernel bandwidth
+            device: Device to place tensors on
         """
         self.signature_transform = signature_transform
         self.sigma = sigma
+        self.device = device or torch.device('cpu')
     
     def __call__(self, generated_paths: torch.Tensor, real_paths: torch.Tensor) -> torch.Tensor:
         """
@@ -320,6 +331,10 @@ class SimplifiedMMDLoss:
         Returns:
             Kernel matrix
         """
+        # Ensure tensors are on correct device
+        X = X.to(self.device)
+        Y = Y.to(self.device)
+        
         # Compute pairwise distances
         X_norm = (X**2).sum(dim=1, keepdim=True)
         Y_norm = (Y**2).sum(dim=1, keepdim=True)

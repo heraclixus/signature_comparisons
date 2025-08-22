@@ -214,7 +214,7 @@ class C3Model(BaseSignatureModel):
             signature_transform=self.signature_transform,
             real_paths=real_data,
             sigma=self.mmd_sigma
-        )
+        , device=self.device)
         
         print(f"✅ C3 hybrid losses initialized")
         print(f"   ELBO loss: {self.elbo_loss.loss_type}")
@@ -242,7 +242,7 @@ class C3Model(BaseSignatureModel):
         
         with torch.no_grad():
             # Create time grid
-            ts = torch.linspace(0, 1.0, time_steps)
+            ts = torch.linspace(0, 1.0, time_steps, device=self.device)
             
             # Sample from posterior using latent SDE
             ys = self.latent_sde.sample_posterior(ts, batch_size)  # (time_steps, batch, 1)
@@ -279,7 +279,7 @@ class C3Model(BaseSignatureModel):
         observations = real_paths[:, 1, :]  # (batch, time_steps)
         
         # Create time grid
-        ts = torch.linspace(0, 1.0, time_steps, device=real_paths.device)
+        ts = torch.linspace(0, 1.0, time_steps, device=self.device)
         
         # Forward pass through latent SDE for ELBO
         ys, kl = self.latent_sde(ts, batch_size)  # ys: (time_steps, batch, 1)

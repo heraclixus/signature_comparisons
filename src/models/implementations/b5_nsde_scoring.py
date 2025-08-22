@@ -248,6 +248,9 @@ class B5Model(BaseSignatureModel):
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
         
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
         # Create signature scoring loss (same as A2)
         # Use simplified signature scoring implementation for B5
         # (sigkernel RBFKernel doesn't have the right interface for scoring rules)
@@ -367,6 +370,9 @@ class B5Model(BaseSignatureModel):
             
             return generated
 
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
 
 class SimplifiedScoringLoss:
     """
@@ -481,8 +487,8 @@ if __name__ == "__main__":
     
     # Create test data
     batch_size = 16
-    example_batch = torch.randn(batch_size, 2, 100)
-    real_data = torch.randn(batch_size, 2, 100)
+    example_batch = torch.randn(batch_size, 2, 100, device=device)
+    real_data = torch.randn(batch_size, 2, 100, device=device)
     
     try:
         # Create B5 model

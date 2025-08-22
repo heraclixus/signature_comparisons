@@ -317,6 +317,9 @@ class B4Model(BaseSignatureModel):
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
         
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
         # Create simplified MMD loss using signature features
         self.signature_transform = TruncatedSignature(
             depth=self.config.signature_config.get('depth', 4)
@@ -324,7 +327,7 @@ class B4Model(BaseSignatureModel):
         
         self.mmd_loss = SimplifiedMMDLoss(
             signature_transform=self.signature_transform,
-            sigma=self.config.loss_config.get('sigma', 1.0)
+            sigma=self.config.loss_config.get('sigma', 1.0, device=self.device)
         )
         
         print(f"B4 MMD loss created with simplified implementation: sigma={self.config.loss_config.get('sigma', 1.0)}")
@@ -431,6 +434,9 @@ class B4Model(BaseSignatureModel):
             
             return generated
 
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
 
 class SimplifiedMMDLoss:
     """
@@ -570,8 +576,8 @@ if __name__ == "__main__":
     
     # Create test data
     batch_size = 16
-    example_batch = torch.randn(batch_size, 2, 100)
-    real_data = torch.randn(batch_size, 2, 100)
+    example_batch = torch.randn(batch_size, 2, 100, device=device)
+    real_data = torch.randn(batch_size, 2, 100, device=device)
     
     try:
         # Create B4 model

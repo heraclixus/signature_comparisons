@@ -100,11 +100,15 @@ class A1FinalModel(BaseSignatureModel):
             example_batch: Example input for model initialization
         """
         if not self.is_model_initialized:
-            # Initialize the generator (this sets up all parameters)
-            _ = self.generator(example_batch)
+            # For CannedNet initialization, we need to use CPU tensors first
+            # then move the entire model to device after initialization
+            example_batch_cpu = example_batch.cpu()
+            
+            # Initialize the generator (this sets up all parameters on CPU)
+            _ = self.generator(example_batch_cpu)
             self.is_model_initialized = True
             
-            # Now move to device after initialization
+            # Now move entire model to target device after initialization
             self.to(self.device)
             
             print(f"Model initialized: {sum(p.numel() for p in self.parameters()):,} parameters")
@@ -118,6 +122,9 @@ class A1FinalModel(BaseSignatureModel):
         """
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
+        
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
         
         # Create the original loss function
         self.loss_function = create_loss_fn(

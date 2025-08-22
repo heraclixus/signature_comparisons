@@ -20,7 +20,7 @@ class SignatureMMDLoss:
     """
     
     def __init__(self, signature_kernel: Any, max_batch: int = 128,
-                 adversarial: bool = False, path_dim: int = 2):
+                 adversarial: bool = False, path_dim: int = 2, device: torch.device = None):
         """
         Initialize Signature MMD Loss.
         
@@ -29,14 +29,16 @@ class SignatureMMDLoss:
             max_batch: Maximum batch size for kernel computation
             adversarial: Whether to include learnable scaling parameters
             path_dim: Dimension of paths (for adversarial scaling)
+            device: Device to place tensors on
         """
         self.signature_kernel = signature_kernel
         self.max_batch = max_batch
         self.adversarial = adversarial
+        self.device = device or torch.device('cpu')
         
         if adversarial:
             # Learnable scaling parameters
-            inits = torch.ones(path_dim)
+            inits = torch.ones(path_dim, device=self.device)
             self._sigma = torch.nn.Parameter(inits, requires_grad=True)
         else:
             self._sigma = None

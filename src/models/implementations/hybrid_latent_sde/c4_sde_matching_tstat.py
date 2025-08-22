@@ -178,7 +178,7 @@ class C4Model(BaseSignatureModel):
             
             # 4. Format output to match our interface
             # Convert from (time_steps, batch, data_size) to (batch, 2, time_steps)
-            ts = torch.linspace(0, T, time_steps)
+            ts = torch.linspace(0, T, time_steps, device=self.device)
             time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
             value_channel = xs.permute(1, 2, 0)  # (batch, data_size, time_steps)
             
@@ -209,7 +209,7 @@ class C4Model(BaseSignatureModel):
         # Create time grid
         batch_size = real_paths.size(0)
         time_steps = real_paths.size(2)
-        ts = torch.linspace(0, 1.0, time_steps, device=real_paths.device)
+        ts = torch.linspace(0, 1.0, time_steps, device=self.device)
         ts = ts.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # (batch, time_steps, 1)
         
         # Compute SDE matching loss

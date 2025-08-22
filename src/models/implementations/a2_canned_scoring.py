@@ -132,14 +132,15 @@ class A2Model(BaseSignatureModel):
             example_batch: Example input for model initialization
         """
         if not self.is_model_initialized:
-            # Ensure example batch is on correct device for initialization
-            example_batch = example_batch.to(self.device)
+            # For CannedNet initialization, we need to use CPU tensors first
+            # then move the entire model to device after initialization
+            example_batch_cpu = example_batch.cpu()
             
-            # Initialize the generator (this sets up all parameters)
-            _ = self.generator(example_batch)
+            # Initialize the generator (this sets up all parameters on CPU)
+            _ = self.generator(example_batch_cpu)
             self.is_model_initialized = True
             
-            # Now move to device after initialization
+            # Now move entire model to target device after initialization
             self.to(self.device)
             
             print(f"A2 model initialized: {sum(p.numel() for p in self.parameters()):,} parameters")

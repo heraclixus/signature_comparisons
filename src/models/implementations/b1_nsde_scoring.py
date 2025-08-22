@@ -260,6 +260,9 @@ class B1Model(BaseSignatureModel):
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
         
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
         # Create PDE-solved signature transform using local sigkernel
         self.signature_transform = PDESolvedSignature(
             dyadic_order=self.config.signature_config.get('dyadic_order', 4),  # Further reduced for memory
@@ -384,6 +387,9 @@ class B1Model(BaseSignatureModel):
             
             return generated
 
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
 
 class SimplifiedScoringLoss:
     """
@@ -498,8 +504,8 @@ if __name__ == "__main__":
     
     # Create test data
     batch_size = 16
-    example_batch = torch.randn(batch_size, 2, 100)
-    real_data = torch.randn(batch_size, 2, 100)
+    example_batch = torch.randn(batch_size, 2, 100, device=device)
+    real_data = torch.randn(batch_size, 2, 100, device=device)
     
     try:
         # Create B1 model

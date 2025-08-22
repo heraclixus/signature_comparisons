@@ -254,6 +254,9 @@ class B3Model(BaseSignatureModel):
         if not self.is_model_initialized:
             raise RuntimeError("Model must be initialized with example batch first")
         
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
         # Use the original T-statistic loss function (same as A1)
         from dataset.generative_model import loss as create_loss_fn
         
@@ -346,6 +349,9 @@ class B3Model(BaseSignatureModel):
             
             return generated
 
+        # Ensure real paths are on the correct device
+        real_paths = real_paths.to(self.device)
+        
 
 def create_b3_model(example_batch: torch.Tensor, real_data: torch.Tensor, 
                    config_overrides: Optional[Dict[str, Any]] = None) -> B3Model:
@@ -407,8 +413,8 @@ if __name__ == "__main__":
     
     # Create test data
     batch_size = 16
-    example_batch = torch.randn(batch_size, 2, 100)
-    real_data = torch.randn(batch_size, 2, 100)
+    example_batch = torch.randn(batch_size, 2, 100, device=device)
+    real_data = torch.randn(batch_size, 2, 100, device=device)
     
     try:
         # Create B3 model

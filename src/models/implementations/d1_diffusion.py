@@ -249,7 +249,7 @@ class D1Model(BaseSignatureModel):
         )
         
         # Get beta and alpha schedules for sampling
-        diffusion_indices = torch.linspace(0, 1, self.diffusion_steps)
+        diffusion_indices = torch.linspace(0, 1, self.diffusion_steps, device=self.device)
         self.betas = self.beta_scheduler(diffusion_indices)
         self.alphas = torch.cumprod(1 - self.betas, dim=0)
         
