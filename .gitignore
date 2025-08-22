@@ -9,7 +9,7 @@ __pycache__/
 
 # Training results and models
 results/*/trained_models/
-
+results/*/logs/
 # Generated evaluation CSV files
 results/*/evaluation/*.csv
 results/*/training/*.csv
