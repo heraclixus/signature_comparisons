@@ -319,11 +319,27 @@ def create_dataset_persistence(data_root: Optional[str] = None) -> DatasetPersis
         DatasetPersistence instance
     """
     if data_root is None:
-        # Get the project root directory
+        # Get the project root directory - be more robust about finding it
         current_dir = Path(__file__).parent
         project_root = current_dir.parent.parent  # Go up from src/utils to project root
+        
+        # Make sure we're using an absolute path to avoid working directory issues
+        project_root = project_root.resolve()
         data_root = project_root / "data"
+        
+        # If we're running from a different directory, try to find the project root
+        # by looking for signature files like .gitignore or src/
+        if not (project_root / "src").exists() or not (project_root / ".gitignore").exists():
+            # Try to find project root by walking up from current working directory
+            cwd = Path.cwd()
+            for parent in [cwd] + list(cwd.parents):
+                if (parent / "src").is_dir() and (parent / ".gitignore").is_file():
+                    project_root = parent
+                    data_root = project_root / "data"
+                    break
     
+    data_root = Path(data_root).resolve()  # Always use absolute path
+    logger.info(f"Using data directory: {data_root}")
     return DatasetPersistence(str(data_root))
 
 
