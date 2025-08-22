@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import sys
 import os
 
@@ -270,8 +270,9 @@ class V1TorchSDEModel(BaseSignatureModel):
         self.eval()
         
         with torch.no_grad():
-            # Create time grid
-            ts = torch.linspace(0, 1.0, time_steps)
+            # Create time grid on same device as model
+            device = next(self.parameters()).device
+            ts = torch.linspace(0, 1.0, time_steps, device=device)
             
             # Sample from posterior
             ys = self.latent_sde.sample_posterior(ts, batch_size)  # (time_steps, batch, 1)
@@ -306,8 +307,8 @@ class V1TorchSDEModel(BaseSignatureModel):
         # Extract observations (remove time channel)
         observations = real_paths[:, 1, :]  # (batch, time_steps)
         
-        # Create time grid
-        ts = torch.linspace(0, 1.0, time_steps)
+        # Create time grid on same device as real_paths
+        ts = torch.linspace(0, 1.0, time_steps, device=real_paths.device)
         
         # Forward pass through latent SDE
         ys, kl = self.latent_sde(ts, batch_size)  # ys: (time_steps, batch, 1)
@@ -337,7 +338,7 @@ class V1TorchSDEModel(BaseSignatureModel):
         # Extract components for loss computation
         batch_size = batch.size(0)
         time_steps = batch.size(2)
-        ts = torch.linspace(0, 1.0, time_steps)
+        ts = torch.linspace(0, 1.0, time_steps, device=batch.device)
         
         # Forward pass through latent SDE
         ys, kl = self.latent_sde(ts, batch_size)  # ys: (time_steps, batch, 1)
@@ -370,7 +371,7 @@ class V1TorchSDEModel(BaseSignatureModel):
 
 def create_v1_model(example_batch: torch.Tensor, real_data: torch.Tensor,
                    theta: float = 2.0, mu: float = 0.0, sigma: float = 0.5,
-                   hidden_size: int = 200) -> V1TorchSDEModel:
+                   hidden_size: int = 200, config_overrides: Dict[str, Any] = None) -> V1TorchSDEModel:
     """
     Create V1 Latent SDE model (TorchSDE-based).
     
@@ -381,6 +382,7 @@ def create_v1_model(example_batch: torch.Tensor, real_data: torch.Tensor,
         mu: OU process long-term mean
         sigma: OU process volatility
         hidden_size: Hidden size for posterior network
+        config_overrides: Optional configuration overrides (including device)
         
     Returns:
         Initialized V1 TorchSDE model

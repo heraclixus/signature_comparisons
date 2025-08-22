@@ -49,7 +49,7 @@ def solve_sde(
     Returns:
         Path tensor, shape (n_steps+1, batch, latent_dim)
     """
-    tt = torch.linspace(ts, tf, n_steps + 1)[:-1]
+    tt = torch.linspace(ts, tf, n_steps + 1, device=z.device)[:-1]
     dt = (tf - ts) / n_steps
     dt_sqrt = abs(dt) ** 0.5
     
@@ -168,7 +168,7 @@ class V2SDEMatchingModel(BaseSignatureModel):
             
             # 4. Format output to match our interface
             # Convert from (time_steps, batch, data_size) to (batch, 2, time_steps)
-            ts = torch.linspace(0, T, time_steps)
+            ts = torch.linspace(0, T, time_steps, device=batch.device)
             time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
             value_channel = xs.permute(1, 2, 0)  # (batch, data_size, time_steps)
             
@@ -198,7 +198,7 @@ class V2SDEMatchingModel(BaseSignatureModel):
         # Create time grid
         batch_size = real_paths.size(0)
         time_steps = real_paths.size(2)
-        ts = torch.linspace(0, 1.0, time_steps)
+        ts = torch.linspace(0, 1.0, time_steps, device=real_paths.device)
         ts = ts.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # (batch, time_steps, 1)
         
         # Compute SDE matching loss
@@ -222,7 +222,7 @@ class V2SDEMatchingModel(BaseSignatureModel):
         # Create time grid
         batch_size = batch.size(0)
         time_steps = batch.size(2)
-        ts = torch.linspace(0, 1.0, time_steps)
+        ts = torch.linspace(0, 1.0, time_steps, device=batch.device)
         ts = ts.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # (batch, time_steps, 1)
         
         # Compute SDE matching loss components
@@ -259,7 +259,7 @@ class V2SDEMatchingModel(BaseSignatureModel):
 
 def create_v2_model(example_batch: torch.Tensor, real_data: torch.Tensor,
                    data_size: int = 1, latent_size: int = 4, hidden_size: int = 64,
-                   noise_std: float = 0.1) -> V2SDEMatchingModel:
+                   noise_std: float = 0.1, config_overrides: Dict[str, Any] = None) -> V2SDEMatchingModel:
     """
     Create V2 SDE Matching model.
     
@@ -270,6 +270,7 @@ def create_v2_model(example_batch: torch.Tensor, real_data: torch.Tensor,
         latent_size: Latent state dimension
         hidden_size: Hidden layer size
         noise_std: Observation noise std
+        config_overrides: Optional configuration overrides (including device)
         
     Returns:
         Initialized V2 model

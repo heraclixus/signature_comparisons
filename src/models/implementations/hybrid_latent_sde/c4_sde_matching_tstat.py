@@ -127,6 +127,24 @@ class C4Model(BaseSignatureModel):
         
         print(f"✅ C4 model components built successfully")
     
+    def to(self, device):
+        """Override to() method to ensure all components are moved to device."""
+        # Move base model
+        super().to(device)
+        
+        # Move SDE matching components
+        if hasattr(self, 'sde_matching') and self.sde_matching is not None:
+            self.sde_matching = self.sde_matching.to(device)
+        if hasattr(self, 'p_sde') and self.p_sde is not None:
+            self.p_sde = self.p_sde.to(device)
+        if hasattr(self, 'p_observe') and self.p_observe is not None:
+            self.p_observe = self.p_observe.to(device)
+        
+        # Update device tracking
+        self.device = device
+        
+        return self
+    
     def _initialize_losses(self, real_data: torch.Tensor):
         """Initialize T-statistic loss."""
         # Initialize T-statistic loss (reuse from C1)

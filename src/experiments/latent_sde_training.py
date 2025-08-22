@@ -41,16 +41,18 @@ from models.sdematching.implementations.v2_sde_matching import create_v2_model
 class LatentSDETrainer:
     """Trainer for latent SDE models using ELBO objective."""
     
-    def __init__(self, dataset_name: str = 'ou_process', save_dir: str = None):
+    def __init__(self, dataset_name: str = 'ou_process', save_dir: str = None, device: torch.device = None):
         """
         Initialize latent SDE trainer.
         
         Args:
             dataset_name: Name of dataset to train on
             save_dir: Directory to save results
+            device: Device to use for training
         """
         self.dataset_name = dataset_name
         self.save_dir = save_dir or f'results/{dataset_name}_latent_sde'
+        self.device = device or torch.device('cpu')
         
         # Create checkpoint manager
         self.checkpoint_manager = create_checkpoint_manager(self.save_dir)
@@ -60,10 +62,16 @@ class LatentSDETrainer:
         
         print(f"🎯 Latent SDE Trainer initialized for {dataset_name}")
         print(f"   Save directory: {self.save_dir}")
+        print(f"   Device: {self.device}")
     
-    def setup_training_data(self, num_samples: int = 1000, batch_size: int = 32):
+    def setup_training_data(self, num_samples: int = 1000, batch_size: int = 32, test_mode: bool = False):
         """Setup training data for the specified dataset."""
         print(f"\n📊 Setting up training data for {self.dataset_name}...")
+        
+        # Adjust sample size for test mode
+        if test_mode:
+            num_samples = min(num_samples, 1000)
+            print(f"   🧪 Test mode: Using {num_samples} samples")
         
         # Get dataset
         dataset = self.dataset_manager.get_dataset(self.dataset_name, num_samples=num_samples)
@@ -89,7 +97,8 @@ class LatentSDETrainer:
     def train_latent_sde_model(self, model_id: str, num_epochs: int = 100, 
                               learning_rate: float = 1e-3, batch_size: int = 32,
                               latent_dim: int = 4, kl_weight: float = 1.0,
-                              save_every: int = 25, patience: int = 10) -> Dict:
+                              save_every: int = 25, patience: int = 10, 
+                              device: torch.device = None, test_mode: bool = False) -> Dict:
         """
         Train a latent SDE model.
         
@@ -115,8 +124,14 @@ class LatentSDETrainer:
         print(f"Latent dimension: {latent_dim}")
         print(f"KL weight: {kl_weight}")
         
+        # Use provided device or fall back to trainer's device
+        device = device or self.device
+        
         # Setup training data
-        train_loader, example_batch = self.setup_training_data(batch_size=batch_size)
+        num_samples = 1000 if test_mode else 32768  # Align with train_and_save_models.py
+        train_loader, example_batch = self.setup_training_data(
+            num_samples=num_samples, batch_size=batch_size, test_mode=test_mode
+        )
         
         # Create real data tensor for model initialization
         real_data_samples = []
@@ -131,26 +146,46 @@ class LatentSDETrainer:
         
         # Create model
         print(f"\n🏗️ Creating {model_id} model...")
+        
+        # Move data to device for model initialization
+        example_batch = example_batch.to(device)
+        real_data = real_data.to(device)
+        
         if model_id == "V1":
+            # Create V1 model with device configuration
+            config_overrides = {
+                'training_config': {'device': str(device)}
+            }
             model = create_v1_model(
                 example_batch=example_batch,
                 real_data=real_data,
                 theta=2.0,      # OU mean reversion rate
                 mu=0.0,         # OU long-term mean
                 sigma=0.5,      # OU volatility
-                hidden_size=64  # Neural network size
+                hidden_size=64, # Neural network size
+                config_overrides=config_overrides
             )
         elif model_id == "V2":
+            # Create V2 model with device configuration
+            config_overrides = {
+                'training_config': {'device': str(device)}
+            }
             model = create_v2_model(
                 example_batch=example_batch,
                 real_data=real_data,
                 data_size=1,        # Observable dimension
                 latent_size=4,      # Latent dimension
                 hidden_size=64,     # Hidden layer size
-                noise_std=0.1       # Observation noise
+                noise_std=0.1,      # Observation noise
+                config_overrides=config_overrides
             )
         else:
             raise ValueError(f"Unknown latent SDE model: {model_id}")
+        
+        # Move model to device
+        model = model.to(device)
+        print(f"✅ Model created and moved to {device}")
+        print(f"   Parameters: {sum(p.numel() for p in model.parameters()):,}")
         
         # Setup optimizer
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -185,6 +220,9 @@ class LatentSDETrainer:
                 # Handle different data formats
                 if isinstance(batch, (list, tuple)):
                     batch = batch[0]  # Extract tensor from tuple/list
+                
+                # Move batch to device
+                batch = batch.to(device)
                 
                 # Compute ELBO loss
                 try:
@@ -339,7 +377,7 @@ class LatentSDETrainer:
 
 def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
                            num_epochs: int = 100, force_retrain: bool = False,
-                           **kwargs) -> Dict[str, Dict]:
+                           device: torch.device = None, **kwargs) -> Dict[str, Dict]:
     """
     Train multiple latent SDE models.
     
@@ -358,7 +396,7 @@ def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
     print(f"   Epochs: {num_epochs}")
     print(f"   Force retrain: {force_retrain}")
     
-    trainer = LatentSDETrainer(dataset_name)
+    trainer = LatentSDETrainer(dataset_name, device=device)
     results = {}
     
     for model_id in models:
@@ -409,7 +447,7 @@ def train_latent_sde_models(models: List[str], dataset_name: str = 'ou_process',
 
 
 def train_all_latent_sde_models(dataset_name: str = 'ou_process', num_epochs: int = 100,
-                                force_retrain: bool = False, **kwargs) -> Dict[str, Dict]:
+                                force_retrain: bool = False, device: torch.device = None, **kwargs) -> Dict[str, Dict]:
     """Train all available latent SDE models."""
     available_models = ["V1", "V2"]  # V1: TorchSDE Latent SDE, V2: SDE Matching
     
@@ -418,12 +456,13 @@ def train_all_latent_sde_models(dataset_name: str = 'ou_process', num_epochs: in
         dataset_name=dataset_name,
         num_epochs=num_epochs,
         force_retrain=force_retrain,
+        device=device,
         **kwargs
     )
 
 
 def train_all_datasets(models: List[str] = None, num_epochs: int = 100,
-                      force_retrain: bool = False, **kwargs):
+                      force_retrain: bool = False, device: torch.device = None, **kwargs):
     """Train latent SDE models on all available datasets."""
     if models is None:
         models = ["V1"]
@@ -448,6 +487,7 @@ def train_all_datasets(models: List[str] = None, num_epochs: int = 100,
                 dataset_name=dataset_name,
                 num_epochs=num_epochs,
                 force_retrain=force_retrain,
+                device=device,
                 **kwargs
             )
             all_results[dataset_name] = dataset_results
@@ -504,64 +544,130 @@ def main():
     """Main training function."""
     parser = argparse.ArgumentParser(description="Train Latent SDE models")
     
+    # Model selection arguments (aligned with train_and_save_models.py)
     parser.add_argument("--models", nargs='+', default=None,
                        help="Models to train (V1, V2). If not specified, trains all available models")
+    parser.add_argument("--model", type=str, help="Train only specific model (V1, V2)")
     parser.add_argument("--all", action='store_true',
                        help="Train all available latent SDE models")
+    
+    # Dataset arguments
     parser.add_argument("--dataset", type=str, default='ou_process',
                        choices=['ou_process', 'heston', 'rbergomi', 'brownian', 
                                'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07'],
                        help="Dataset to train on")
     parser.add_argument("--all-datasets", action='store_true',
                        help="Train on all 8 datasets: ou_process, heston, rbergomi, brownian, fbm_h03, fbm_h04, fbm_h06, fbm_h07")
-    parser.add_argument("--epochs", type=int, default=100,
+    
+    # Training hyperparameters (aligned with train_and_save_models.py)
+    parser.add_argument("--epochs", type=int, default=1000,  # Changed from 100 to 1000
                        help="Number of training epochs")
-    parser.add_argument("--lr", type=float, default=1e-3,
+    parser.add_argument("--lr", type=float, default=0.001,  # Changed from 1e-3 to 0.001
                        help="Learning rate")
-    parser.add_argument("--batch-size", type=int, default=32,
+    parser.add_argument("--batch-size", type=int, default=128,  # Changed from 32 to 128
                        help="Training batch size")
+    
+    # Latent SDE specific parameters
     parser.add_argument("--latent-dim", type=int, default=4,
                        help="Latent state dimension")
     parser.add_argument("--kl-weight", type=float, default=1.0,
                        help="Weight for KL divergence in ELBO")
-    parser.add_argument("--force-retrain", action='store_true',
-                       help="Force retrain existing models")
     parser.add_argument("--patience", type=int, default=10,
                        help="Early stopping patience")
     
+    # Control arguments (aligned with train_and_save_models.py)
+    parser.add_argument("--force-retrain", action='store_true',
+                       help="Force retrain existing models")
+    parser.add_argument("--retrain-all", action="store_true", 
+                       help="Force retrain all models (ignores existing checkpoints)")
+    parser.add_argument("--list", action="store_true", 
+                       help="List available trained models")
+    
+    # Device and optimization arguments (aligned with train_and_save_models.py)
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], 
+                       help="Device to use for training (auto, cpu, cuda)")
+    parser.add_argument("--test-mode", action="store_true", 
+                       help="Use small datasets (1000 samples) for fast prototyping and testing")
+    
     args = parser.parse_args()
     
+    # Configure device (aligned with train_and_save_models.py)
+    if args.device == "auto":
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device(args.device)
+    
+    print(f"🖥️ Training Device: {device}")
+    if device.type == 'cuda':
+        print(f"   GPU: {torch.cuda.get_device_name()}")
+        print(f"   Memory: {torch.cuda.get_device_properties(device).total_memory / 1e9:.1f} GB")
+    
+    # Configure test mode
+    if args.test_mode:
+        print(f"🧪 Test Mode Enabled:")
+        print(f"   Using small datasets (1000 samples) for fast prototyping")
+        print(f"   Reduced epochs and batch sizes for quick testing")
+    
+    # Handle list command
+    if args.list:
+        # List models for all datasets
+        datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
+        for dataset_name in datasets:
+            save_dir = f'results/{dataset_name}_latent_sde'
+            if os.path.exists(save_dir):
+                print(f"\n{dataset_name.upper()} Dataset:")
+                checkpoint_manager = create_checkpoint_manager(save_dir)
+                checkpoint_manager.print_available_models()
+        return
+    
     # Determine models to train
-    if args.all:
+    if args.model:
+        # Single model training (aligned with train_and_save_models.py)
+        models = [args.model]
+        print(f"🎯 Single Model Training Mode")
+        print(f"   Model: {args.model}")
+        print(f"   Dataset: {args.dataset}")
+        if args.retrain_all or args.force_retrain:
+            print(f"   Mode: Force retrain")
+    elif args.all:
         models = ["V1", "V2"]  # All available latent SDE models
     elif args.models:
         models = args.models
     else:
         models = ["V1", "V2"]  # Default to both models
     
-    # Training parameters
+    # Training parameters (with device and test mode support)
     training_kwargs = {
         'learning_rate': args.lr,
-        'batch_size': args.batch_size,
+        'batch_size': args.batch_size if not args.test_mode else 32,  # Smaller batch for test mode
         'latent_dim': args.latent_dim,
         'kl_weight': args.kl_weight,
-        'patience': args.patience
+        'patience': args.patience,
+        'device': device,  # Pass device to training functions
+        'test_mode': args.test_mode
     }
     
+    # Adjust epochs for test mode
+    epochs = args.epochs if not args.test_mode else min(args.epochs, 100)
+    if args.test_mode and epochs != args.epochs:
+        print(f"   Epochs reduced to {epochs} for test mode")
+    
     # Train on specified datasets
+    force_retrain = args.force_retrain or args.retrain_all
+    
     if args.all_datasets:
         results = train_all_datasets(
             models=models,
-            num_epochs=args.epochs,
-            force_retrain=args.force_retrain,
+            num_epochs=epochs,
+            force_retrain=force_retrain,
             **training_kwargs
         )
     else:
         results = train_latent_sde_models(
             models=models,
             dataset_name=args.dataset,
-            num_epochs=args.epochs,
-            force_retrain=args.force_retrain,
+            num_epochs=epochs,
+            force_retrain=force_retrain,
             **training_kwargs
         )
     

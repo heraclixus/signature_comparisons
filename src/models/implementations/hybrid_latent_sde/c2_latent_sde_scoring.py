@@ -183,6 +183,20 @@ class C2Model(BaseSignatureModel):
         
         print(f"✅ C2 model components built successfully")
     
+    def to(self, device):
+        """Override to() method to ensure all components are moved to device."""
+        # Move base model
+        super().to(device)
+        
+        # Move latent SDE component
+        if hasattr(self, 'latent_sde') and self.latent_sde is not None:
+            self.latent_sde = self.latent_sde.to(device)
+        
+        # Update device tracking
+        self.device = device
+        
+        return self
+    
     def _initialize_losses(self, real_data: torch.Tensor):
         """Initialize both ELBO and signature scoring losses."""
         # Initialize ELBO loss (reuse existing)
