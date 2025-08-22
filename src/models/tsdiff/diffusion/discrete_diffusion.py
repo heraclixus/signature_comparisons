@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.distributions as td
 
-from tsdiff.diffusion.noise import Normal, OrnsteinUhlenbeck, GaussianProcess
+from .noise import Normal, OrnsteinUhlenbeck, GaussianProcess
 
 
 class DiscreteDiffusion(nn.Module):

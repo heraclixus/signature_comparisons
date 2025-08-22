@@ -116,8 +116,16 @@ except ImportError:
 try:
     from models.implementations.d1_diffusion import create_d1_model
     D1_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     D1_AVAILABLE = False
+    print(f"❌ D1 model import failed: {e}")
+    # For debugging server issues - show key error details
+    if "tsdiff" in str(e):
+        print("   → This appears to be a TSDiff import issue")
+        print("   → Check that relative imports are used in tsdiff modules")
+    else:
+        import traceback
+        traceback.print_exc()
 
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
@@ -961,6 +969,17 @@ def train_model_standard(model, model_id: str, checkpoint_manager, train_data: t
 def main():
     """Main training function with multi-dataset support."""
     import argparse
+    import sys
+    import os
+    
+    # Quick environment check for debugging server issues
+    if not D1_AVAILABLE:
+        print("⚠️ D1 model not available - checking environment:")
+        print(f"   Working directory: {os.getcwd()}")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        d1_file = os.path.join(script_dir, '..', 'models', 'implementations', 'd1_diffusion.py')
+        print(f"   D1 file exists: {os.path.exists(os.path.abspath(d1_file))}")
+        print(f"   Python path contains src: {any('src' in p for p in sys.path)}")
     
     parser = argparse.ArgumentParser(description="Train and save signature-based models")
     parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs")
@@ -1121,6 +1140,17 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
     
     if not available:
         print(f"❌ Model {model_id} is not available (import failed)")
+        print(f"Debug info: D1_AVAILABLE = {D1_AVAILABLE}")
+        if model_id == "D1":
+            print("Attempting to re-import D1 model for debugging...")
+            try:
+                from models.implementations.d1_diffusion import create_d1_model as debug_d1
+                print("✅ D1 re-import successful!")
+                print(f"Function location: {debug_d1.__module__}")
+            except Exception as debug_e:
+                print(f"❌ D1 re-import failed: {debug_e}")
+                import traceback
+                traceback.print_exc()
         return False
     
     print(f"📋 Model: {model_id} ({description})")
