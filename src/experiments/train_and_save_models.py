@@ -314,9 +314,19 @@ def setup_training_data(n_samples: int = None, n_points: int = None, batch_size:
         train_dataset = generative_model.get_noise(n_points=n_points, num_samples=n_samples)
         train_loader = torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         
-        # Test data for model initialization (signal)  
-        signals_dataset = dataset_manager.get_dataset('ou_process', num_samples=test_samples, n_points=n_points)
-        signals = torch.stack([signals_dataset[i][0] for i in range(min(test_samples, len(signals_dataset)))])
+        # Test data for model initialization (signal)
+        # Try to get from the same size dataset as training, or generate fresh if not available
+        try:
+            # First try to load a dataset with the same number of samples as training
+            signals_dataset = dataset_manager.get_dataset('ou_process', num_samples=n_samples, n_points=n_points)
+            # Take only the first test_samples for model initialization
+            signals = torch.stack([signals_dataset[i][0] for i in range(min(test_samples, len(signals_dataset)))])
+        except:
+            # Fallback: generate fresh signal data for model initialization
+            print(f"  📊 Generating fresh OU signal data for model initialization ({test_samples} samples)")
+            signals_dataset = generative_model.get_signal(num_samples=test_samples, n_points=n_points)
+            signals = torch.stack([signals_dataset[i][0] for i in range(test_samples)])
+        
         example_batch, _ = next(iter(torchdata.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)))
     else:
         # For other datasets, use the dataset manager
