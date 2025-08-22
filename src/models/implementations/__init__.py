@@ -17,6 +17,13 @@ from .b3_nsde_tstatistic import B3Model, create_b3_model
 from .b4_nsde_mmd import B4Model, create_b4_model
 from .b5_nsde_scoring import B5Model, create_b5_model
 
+# Import diffusion models
+try:
+    from .d1_diffusion import D1Model, create_d1_model
+    D1_AVAILABLE = True
+except ImportError:
+    D1_AVAILABLE = False
+
 # Import hybrid latent SDE models
 try:
     from .hybrid_latent_sde import C1Model, create_c1_model
@@ -68,6 +75,10 @@ def get_all_model_creators():
         'B5': create_b5_model
     }
     
+    # Add diffusion models if available
+    if D1_AVAILABLE:
+        creators['D1'] = create_d1_model
+    
     # Add hybrid models if available
     if C1_AVAILABLE:
         creators['C1'] = create_c1_model
@@ -105,6 +116,10 @@ __all__ = [
     'create_b5_model',
     'get_all_model_creators'
 ]
+
+# Add diffusion models to __all__ if available
+if D1_AVAILABLE:
+    __all__.extend(['D1Model', 'create_d1_model'])
 
 # Add hybrid models to __all__ if available
 if C1_AVAILABLE:

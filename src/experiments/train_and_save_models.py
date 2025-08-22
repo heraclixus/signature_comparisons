@@ -113,6 +113,12 @@ try:
 except ImportError:
     C6_AVAILABLE = False
 
+try:
+    from models.implementations.d1_diffusion import create_d1_model
+    D1_AVAILABLE = True
+except ImportError:
+    D1_AVAILABLE = False
+
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
@@ -177,8 +183,13 @@ class ModelTrainer:
                 # Forward pass
                 output = model(data)
                 
-                # Compute loss
-                loss = model.compute_loss(output)
+                # Compute loss (handle D1 diffusion model specially)
+                if hasattr(model, 'compute_training_loss'):
+                    # D1 and other models with special training loss
+                    loss = model.compute_training_loss(output, data)
+                else:
+                    # Standard models
+                    loss = model.compute_loss(output)
                 
                 # Backward pass
                 loss.backward()
@@ -474,6 +485,15 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 print(f"🔄 C6 exists but retraining due to --retrain-all flag")
             models_to_train.append(("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD"))
     
+    # Check D1 (Time Series Diffusion Model)
+    if D1_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("D1"):
+            print(f"⏭️ D1 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("D1"):
+                print(f"🔄 D1 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("D1", create_d1_model, "Time Series Diffusion Model"))
+    
     # C1-C3 models removed - not truly generative
     
     if not models_to_train:
@@ -686,7 +706,8 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("C3", create_c3_model, "Hybrid Latent SDE + Signature MMD", C3_AVAILABLE),
         ("C4", create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
         ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
-        ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE)
+        ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
+        ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE)
     ]
     
     for model_id, create_fn, description, available in model_configs:
@@ -947,6 +968,7 @@ def main():
     parser.add_argument("--force", type=str, help="Force retrain specific model")
     parser.add_argument("--retrain-all", action="store_true", help="Force retrain all models (ignores existing checkpoints)")
     parser.add_argument("--dataset", type=str, help="Train on specific dataset (ou_process, heston, rbergomi, brownian, fbm_h03, fbm_h04, fbm_h06, fbm_h07)")
+    parser.add_argument("--model", type=str, help="Train only specific model (A1, A2, A3, A4, B1, B2, B3, B4, B5, C1, C2, C3, C4, C5, C6, D1)")
     parser.add_argument("--list", action="store_true", help="List available trained models")
     parser.add_argument("--memory-opt", action="store_true", help="Enable memory optimization for B-type models (slower but uses less memory)")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for training (auto, cpu, cuda)")
@@ -1001,7 +1023,32 @@ def main():
                 checkpoint_manager.print_available_models()
         return
     
-    if args.force:
+    if args.model:
+        # Train single specific model
+        dataset = args.dataset or 'ou_process'
+        retrain = args.retrain_all or (args.force == args.model)
+        
+        print(f"🎯 Single Model Training Mode")
+        print(f"   Model: {args.model}")
+        print(f"   Dataset: {dataset}")
+        if retrain:
+            print(f"   Mode: Force retrain")
+        
+        success = train_single_model(
+            model_id=args.model,
+            dataset_name=dataset,
+            epochs=args.epochs,
+            lr=args.lr,
+            memory_optimized=args.memory_opt,
+            retrain=retrain
+        )
+        
+        if success:
+            print(f"\n🎉 Single model training completed successfully!")
+        else:
+            print(f"\n❌ Single model training failed!")
+        return
+    elif args.force:
         # Force retrain on specific dataset or all datasets
         if args.dataset:
             force_retrain_model_on_dataset(args.force, args.dataset, args.epochs, args.memory_opt)
@@ -1031,6 +1078,146 @@ def main():
     else:
         # Train on all datasets (default behavior)
         train_all_datasets(args.epochs, args.lr, args.memory_opt)
+
+
+def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: int = 100, 
+                      lr: float = 0.001, memory_optimized: bool = False, retrain: bool = False):
+    """Train a single specific model on a dataset."""
+    print(f"🎯 Training Single Model: {model_id}")
+    print(f"   Dataset: {dataset_name}")
+    print(f"   Epochs: {epochs}")
+    if memory_optimized:
+        print("   🧠 Memory optimization enabled")
+    if retrain:
+        print("   🔄 Force retrain mode")
+    print("=" * 50)
+    
+    # Get model configuration
+    model_configs = {
+        "A1": (create_a1_final_model, "CannedNet + T-Statistic", A1_AVAILABLE),
+        "A2": (create_a2_model, "CannedNet + Signature Scoring", A2_AVAILABLE),
+        "A3": (create_a3_model, "CannedNet + MMD", A3_AVAILABLE),
+        "A4": (create_a4_model, "CannedNet + T-Statistic + Log Signatures", A4_AVAILABLE),
+        "B1": (create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved", B1_AVAILABLE),
+        "B2": (create_b2_model, "Neural SDE + MMD + PDE-Solved", B2_AVAILABLE),
+        "B3": (create_b3_model, "Neural SDE + T-Statistic", B3_AVAILABLE),
+        "B4": (create_b4_model, "Neural SDE + MMD", B4_AVAILABLE),
+        "B5": (create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE),
+        "C1": (create_c1_model, "Hybrid Latent SDE + T-Statistic", C1_AVAILABLE),
+        "C2": (create_c2_model, "Hybrid Latent SDE + Signature Scoring", C2_AVAILABLE),
+        "C3": (create_c3_model, "Hybrid Latent SDE + Signature MMD", C3_AVAILABLE),
+        "C4": (create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
+        "C5": (create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
+        "C6": (create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
+        "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE)
+    }
+    
+    if model_id not in model_configs:
+        print(f"❌ Unknown model ID: {model_id}")
+        print(f"Available models: {list(model_configs.keys())}")
+        return False
+    
+    create_fn, description, available = model_configs[model_id]
+    
+    if not available:
+        print(f"❌ Model {model_id} is not available (import failed)")
+        return False
+    
+    print(f"📋 Model: {model_id} ({description})")
+    
+    # Setup checkpoint manager
+    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}')
+    
+    # Check if model already exists
+    if not retrain and checkpoint_manager.model_exists(model_id):
+        print(f"⏭️ {model_id} already trained on {dataset_name}")
+        print(f"   Use --retrain-all or --force to retrain")
+        return True
+    
+    if retrain and checkpoint_manager.model_exists(model_id):
+        print(f"🔄 {model_id} exists but retraining due to retrain flag")
+    
+    # Setup training data
+    try:
+        if dataset_name == 'ou_process':
+            train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name)
+        else:
+            # Setup data for other datasets
+            dataset_manager = MultiDatasetManager(use_persistence=True)
+            dataset_samples = TEST_MODE_PARAMS['num_samples'] if TEST_MODE_PARAMS else 32768
+            test_samples = TEST_MODE_PARAMS['test_samples'] if TEST_MODE_PARAMS else 256
+            
+            dataset_data = dataset_manager.get_dataset(dataset_name, num_samples=dataset_samples)
+            train_data = torch.stack([dataset_data[i][0] for i in range(min(dataset_samples, len(dataset_data)))])
+            signals = torch.stack([dataset_data[i][0] for i in range(min(test_samples, len(dataset_data)))])
+            example_batch = train_data[:32]  # Use first 32 samples as example batch
+            
+            # Create data loader
+            batch_size = TEST_MODE_PARAMS['batch_size'] if TEST_MODE_PARAMS else 128
+            dataset_tensor = torch.utils.data.TensorDataset(train_data, torch.zeros(train_data.shape[0]))
+            train_loader = torch.utils.data.DataLoader(dataset_tensor, batch_size=batch_size, shuffle=True)
+            
+            print(f"Training: {train_data.shape[0]} samples, batch size {batch_size}")
+            print(f"Test data: {signals.shape}")
+    
+    except Exception as e:
+        print(f"❌ Failed to setup training data: {e}")
+        return False
+    
+    # Create and train model
+    try:
+        print(f"\n🏗️ Creating {model_id} model...")
+        torch.manual_seed(12345)  # Consistent seed
+        model = create_fn(example_batch, signals)
+        
+        # Move model to training device
+        model = model.to(TRAINING_DEVICE)
+        
+        print(f"✅ Model created: {sum(p.numel() for p in model.parameters()):,} parameters")
+        print(f"   Model device: {TRAINING_DEVICE}")
+        
+        # Setup trainer
+        trainer = ModelTrainer(checkpoint_manager)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        
+        print(f"\n🚀 Starting training...")
+        
+        # Choose training method
+        if memory_optimized and model_id.startswith('B'):
+            print(f"🧠 Using memory-optimized training for {model_id}")
+            train_data = signals if dataset_name == 'ou_process' else train_data
+            success, best_loss, best_epoch = train_model_memory_optimized(
+                model, model_id, checkpoint_manager, train_data, epochs
+            )
+            if success:
+                print(f"✅ {model_id} training completed!")
+                print(f"   Best loss: {best_loss:.6f} at epoch {best_epoch}")
+            else:
+                print(f"❌ {model_id} training failed")
+        else:
+            # Standard training with checkpointing
+            history = trainer.train_with_checkpointing(
+                model=model,
+                model_id=model_id,
+                train_loader=train_loader,
+                optimizer=optimizer,
+                num_epochs=epochs,
+                save_every=25,
+                patience=10
+            )
+            
+            print(f"✅ {model_id} training completed!")
+            print(f"   Best loss: {history['best_loss']:.6f} at epoch {history['best_epoch']}")
+            print(f"   Final loss: {history['final_loss']:.6f}")
+            print(f"   Total time: {history['total_time']:.2f}s")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Training failed for {model_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def force_retrain_model_on_dataset(model_id: str, dataset_name: str, epochs: int, memory_optimized: bool = False):

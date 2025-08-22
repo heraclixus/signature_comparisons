@@ -31,6 +31,7 @@ A comprehensive comparison of signature-based methods for time series generation
 | **C4** | SDE Matching | SDE Matching + T-Statistic | Truncated | 🔬 Hybrid | V2 SDE Matching + signature T-statistic loss |
 | **C5** | SDE Matching | SDE Matching + Signature Scoring | Truncated | 🔬 Hybrid | V2 SDE Matching + signature scoring loss |
 | **C6** | SDE Matching | SDE Matching + Signature MMD | Truncated | 🔬 Hybrid | V2 SDE Matching + signature MMD loss |
+| **D1** | Diffusion | Denoising Loss | N/A | 🌊 Diffusion | Transformer + discrete diffusion with GP-structured noise |
 
 ### Key Architecture Components
 
@@ -38,6 +39,7 @@ A comprehensive comparison of signature-based methods for time series generation
 - **CannedNet**: Simple feedforward neural network generator
 - **Neural SDE**: Stochastic Differential Equation-based generator with drift/diffusion networks
 - **Latent SDE**: SDE operating in latent space with encoder/decoder components
+- **Diffusion**: Transformer-based denoising network with reverse diffusion process
 
 #### **Loss Functions:**
 - **T-Statistic**: Statistical hypothesis testing loss
@@ -46,6 +48,7 @@ A comprehensive comparison of signature-based methods for time series generation
 - **Log Signature**: Logarithmic signature feature matching
 - **ELBO**: Evidence Lower Bound (variational inference)
 - **SDE Matching**: 3-component loss (prior KL + SDE matching + reconstruction)
+- **Denoising Loss**: Diffusion model noise prediction loss (MSE)
 
 #### **Signature Methods:**
 - **Truncated**: Standard truncated signature computation
@@ -57,6 +60,7 @@ A comprehensive comparison of signature-based methods for time series generation
 - **⚔️ Adversarial**: Generator vs discriminator training
 - **🧠 Latent SDE**: Variational inference in latent SDE space
 - **🔬 Hybrid**: Multi-objective training combining SDE and signature losses
+- **🌊 Diffusion**: Reverse diffusion process with denoising objective
 
 ### Quick Reference
 
@@ -214,6 +218,11 @@ python src/experiments/train_and_save_models.py --device cuda --epochs 1000
 
 # Fast prototyping with small datasets
 python src/experiments/train_and_save_models.py --test-mode --epochs 50
+
+# Train single specific model (quick testing)
+python src/experiments/train_and_save_models.py --model D1 --dataset ou_process --epochs 100
+python src/experiments/train_and_save_models.py --model A3 --test-mode --epochs 10
+python src/experiments/train_and_save_models.py --model C1 --retrain-all --epochs 200
 ```
 
 #### Training Options
@@ -226,6 +235,10 @@ python src/experiments/train_and_save_models.py --test-mode --epochs 50
 # Dataset size options
 --test-mode      # Use 1,000 samples for fast prototyping
                  # (vs 32,768 samples in normal mode)
+
+# Single model training
+--model MODEL    # Train only specific model (A1, A2, A3, A4, B1, B2, B3, B4, B5, 
+                 # C1, C2, C3, C4, C5, C6, D1) - great for quick testing
 
 # Memory optimization
 --memory-opt     # Enable memory-efficient training for B-type models
