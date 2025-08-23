@@ -327,7 +327,7 @@ class B4Model(BaseSignatureModel):
         
         self.mmd_loss = SimplifiedMMDLoss(
             signature_transform=self.signature_transform,
-            sigma=self.config.loss_config.get('sigma', 1.0, device=self.device)
+            sigma=self.config.loss_config.get('sigma', 1.0)
         )
         
         print(f"B4 MMD loss created with simplified implementation: sigma={self.config.loss_config.get('sigma', 1.0)}")
@@ -575,6 +575,7 @@ if __name__ == "__main__":
     print("Neural SDE + MMD + Truncated Signature")
     
     # Create test data
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     batch_size = 16
     example_batch = torch.randn(batch_size, 2, 100, device=device)
     real_data = torch.randn(batch_size, 2, 100, device=device)
