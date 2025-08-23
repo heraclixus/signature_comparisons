@@ -261,23 +261,31 @@ class C3Model(BaseSignatureModel):
         Returns:
             Generated paths, shape (batch, 2, time_steps) - [time, value]
         """
-        self.eval()
+        # Preserve original training mode
+        was_training = self.training
         
-        with torch.no_grad():
-            # Create time grid
-            ts = torch.linspace(0, 1.0, time_steps, device=self.device)
+        try:
+            self.eval()
             
-            # Sample from posterior using latent SDE
-            ys = self.latent_sde.sample_posterior(ts, batch_size)  # (time_steps, batch, 1)
-            
-            # Format output to match our interface
-            # Convert from (time_steps, batch, 1) to (batch, 2, time_steps)
-            time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
-            value_channel = ys.squeeze(-1).t().unsqueeze(1)  # (batch, 1, time_steps)
-            
-            output = torch.cat([time_channel, value_channel], dim=1)
-            
-            return output
+            with torch.no_grad():
+                # Create time grid
+                ts = torch.linspace(0, 1.0, time_steps, device=self.device)
+                
+                # Sample from posterior using latent SDE
+                ys = self.latent_sde.sample_posterior(ts, batch_size)  # (time_steps, batch, 1)
+                
+                # Format output to match our interface
+                # Convert from (time_steps, batch, 1) to (batch, 2, time_steps)
+                time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
+                value_channel = ys.squeeze(-1).t().unsqueeze(1)  # (batch, 1, time_steps)
+                
+                output = torch.cat([time_channel, value_channel], dim=1)
+                
+                return output
+                
+        finally:
+            # Always restore original training mode
+            self.train(was_training)
     
     def compute_loss(self, generated_output: torch.Tensor, 
                     real_paths: torch.Tensor = None) -> torch.Tensor:

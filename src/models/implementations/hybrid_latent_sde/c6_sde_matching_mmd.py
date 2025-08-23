@@ -262,29 +262,37 @@ class C6Model(BaseSignatureModel):
         Returns:
             Generated paths, shape (batch, 2, time_steps) - [time, value]
         """
-        self.eval()
+        # Preserve original training mode
+        was_training = self.training
         
-        with torch.no_grad():
-            # 1. Sample initial latent state from prior
-            z0 = self.p_init_distr().rsample([batch_size])[:, 0]  # (batch, latent_size)
+        try:
+            self.eval()
             
-            # 2. Solve prior SDE in latent space
-            zs = solve_sde(self.p_sde, z0, 0., T, n_steps=time_steps-1)  # (time_steps, batch, latent_size)
-            
-            # 3. Map latent trajectories to observations
-            zs_flat = zs.reshape(-1, self.latent_size)  # (time_steps * batch, latent_size)
-            xs_flat, _ = self.p_observe.get_coeffs(zs_flat)  # (time_steps * batch, data_size)
-            xs = xs_flat.reshape(time_steps, batch_size, self.data_size)  # (time_steps, batch, data_size)
-            
-            # 4. Format output to match our interface
-            # Convert from (time_steps, batch, data_size) to (batch, 2, time_steps)
-            ts = torch.linspace(0, T, time_steps, device=self.device)
-            time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
-            value_channel = xs.permute(1, 2, 0)  # (batch, data_size, time_steps)
-            
-            output = torch.cat([time_channel, value_channel], dim=1)
-            
-            return output
+            with torch.no_grad():
+                # 1. Sample initial latent state from prior
+                z0 = self.p_init_distr().rsample([batch_size])[:, 0]  # (batch, latent_size)
+                
+                # 2. Solve prior SDE in latent space
+                zs = solve_sde(self.p_sde, z0, 0., T, n_steps=time_steps-1)  # (time_steps, batch, latent_size)
+                
+                # 3. Map latent trajectories to observations
+                zs_flat = zs.reshape(-1, self.latent_size)  # (time_steps * batch, latent_size)
+                xs_flat, _ = self.p_observe.get_coeffs(zs_flat)  # (time_steps * batch, data_size)
+                xs = xs_flat.reshape(time_steps, batch_size, self.data_size)  # (time_steps, batch, data_size)
+                
+                # 4. Format output to match our interface
+                # Convert from (time_steps, batch, data_size) to (batch, 2, time_steps)
+                ts = torch.linspace(0, T, time_steps, device=self.device)
+                time_channel = ts.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, -1)
+                value_channel = xs.permute(1, 2, 0)  # (batch, data_size, time_steps)
+                
+                output = torch.cat([time_channel, value_channel], dim=1)
+                
+                return output
+                
+        finally:
+            # Always restore original training mode
+            self.train(was_training)
     
     def compute_loss(self, generated_output: torch.Tensor, 
                     real_paths: torch.Tensor = None) -> torch.Tensor:
