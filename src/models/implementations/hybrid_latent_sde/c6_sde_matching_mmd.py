@@ -44,7 +44,7 @@ class SimplifiedMMDLoss:
     (Reused from C3 implementation)
     """
     
-    def __init__(self, signature_transform, real_paths: torch.Tensor, sigma: float = 1.0):
+    def __init__(self, signature_transform, real_paths: torch.Tensor, sigma: float = 1.0, device: torch.device = None):
         """
         Initialize simplified MMD loss.
         
@@ -52,14 +52,17 @@ class SimplifiedMMDLoss:
             signature_transform: Signature transform to use
             real_paths: Real paths for MMD comparison
             sigma: RBF kernel bandwidth
+            device: Device to use for computations
         """
         self.signature_transform = signature_transform
         self.sigma = sigma
+        self.device = device or torch.device('cpu')
         
-        # Precompute real signatures
-        self.real_signatures = self.signature_transform(real_paths)
+        # Move real_paths to device and precompute real signatures
+        real_paths = real_paths.to(self.device)
+        self.real_signatures = self.signature_transform(real_paths).to(self.device)
         
-        print(f"Signature MMD loss initialized with sigma={sigma}")
+        print(f"Signature MMD loss initialized with sigma={sigma}, device={self.device}")
     
     def __call__(self, generated_paths: torch.Tensor) -> torch.Tensor:
         """
@@ -71,8 +74,9 @@ class SimplifiedMMDLoss:
         Returns:
             MMD loss
         """
-        # Compute signature features for generated paths
-        gen_sigs = self.signature_transform(generated_paths)
+        # Move generated paths to device and compute signature features
+        generated_paths = generated_paths.to(self.device)
+        gen_sigs = self.signature_transform(generated_paths).to(self.device)
         
         # Compute RBF kernel MMD
         return self._rbf_mmd(gen_sigs, self.real_signatures)
@@ -101,6 +105,10 @@ class SimplifiedMMDLoss:
     
     def _rbf_kernel(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
         """Compute RBF kernel similarities."""
+        # Ensure both tensors are on the same device
+        X = X.to(self.device)
+        Y = Y.to(self.device)
+        
         # Compute pairwise distances
         X_norm = (X**2).sum(dim=1, keepdim=True)
         Y_norm = (Y**2).sum(dim=1, keepdim=True)
@@ -227,7 +235,8 @@ class C6Model(BaseSignatureModel):
         self.mmd_loss = SimplifiedMMDLoss(
             signature_transform=self.signature_transform,
             real_paths=real_data,
-            sigma=self.mmd_sigma
+            sigma=self.mmd_sigma,
+            device=self.device
         )
         
         print(f"✅ C6 hybrid losses initialized")

@@ -49,7 +49,7 @@ class SimplifiedScoringLoss:
     (Reused from B5 implementation)
     """
     
-    def __init__(self, signature_transform, real_paths: torch.Tensor, sigma: float = 1.0):
+    def __init__(self, signature_transform, real_paths: torch.Tensor, sigma: float = 1.0, device: torch.device = None):
         """
         Initialize simplified scoring loss.
         
@@ -57,14 +57,17 @@ class SimplifiedScoringLoss:
             signature_transform: Signature transform to use
             real_paths: Real paths for scoring comparison
             sigma: RBF kernel bandwidth
+            device: Device to use for computations
         """
         self.signature_transform = signature_transform
         self.sigma = sigma
+        self.device = device or torch.device('cpu')
         
-        # Precompute real signatures
-        self.real_signatures = self.signature_transform(real_paths)
+        # Move real_paths to device and precompute real signatures
+        real_paths = real_paths.to(self.device)
+        self.real_signatures = self.signature_transform(real_paths).to(self.device)
         
-        print(f"Signature scoring loss initialized with sigma={sigma}")
+        print(f"Signature scoring loss initialized with sigma={sigma}, device={self.device}")
     
     def __call__(self, generated_paths: torch.Tensor) -> torch.Tensor:
         """
@@ -76,8 +79,9 @@ class SimplifiedScoringLoss:
         Returns:
             Scoring loss
         """
-        # Compute signature features for generated paths
-        gen_sigs = self.signature_transform(generated_paths)
+        # Move generated paths to device and compute signature features
+        generated_paths = generated_paths.to(self.device)
+        gen_sigs = self.signature_transform(generated_paths).to(self.device)
         
         # Simplified scoring rule: negative log-likelihood approximation
         # Using RBF kernel similarity
@@ -90,6 +94,10 @@ class SimplifiedScoringLoss:
     
     def _rbf_kernel(self, X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
         """Compute RBF kernel similarities."""
+        # Ensure both tensors are on the same device
+        X = X.to(self.device)
+        Y = Y.to(self.device)
+        
         # Compute pairwise distances
         X_norm = (X**2).sum(dim=1, keepdim=True)
         Y_norm = (Y**2).sum(dim=1, keepdim=True)
@@ -210,7 +218,8 @@ class C2Model(BaseSignatureModel):
         self.scoring_loss = SimplifiedScoringLoss(
             signature_transform=self.signature_transform,
             real_paths=real_data,
-            sigma=self.scoring_sigma
+            sigma=self.scoring_sigma,
+            device=self.device
         )
         
         print(f"✅ C2 hybrid losses initialized")
