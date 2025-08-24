@@ -69,7 +69,15 @@ def load_dataset_results():
     
     # Combine all results
     combined_df = pd.concat(all_results, ignore_index=True)
+    
+    # Filter out A3 model (outlier)
+    original_count = len(combined_df)
+    combined_df = combined_df[combined_df['model_id'] != 'A3'].reset_index(drop=True)
+    filtered_count = original_count - len(combined_df)
+    
     print(f"✅ Loaded results for {len(base_datasets)} datasets, {len(combined_df)} total evaluations")
+    if filtered_count > 0:
+        print(f"   🚫 Filtered out A3 model (outlier): {filtered_count} evaluations removed")
     print(f"   Non-adversarial models: {len(combined_df[combined_df['training_type'] == 'non_adversarial'])}")
     print(f"   Adversarial models: {len(combined_df[combined_df['training_type'] == 'adversarial'])}")
     print(f"   Latent SDE models: {len(combined_df[combined_df['training_type'] == 'latent_sde'])}")

@@ -25,23 +25,41 @@ from utils.model_checkpoint import create_checkpoint_manager
 
 
 def compute_core_metrics(generated: torch.Tensor, ground_truth: torch.Tensor) -> Dict[str, float]:
-    """Compute core evaluation metrics."""
+    """Compute core evaluation metrics with support for C/D series models."""
     gen_np = generated.detach().cpu().numpy()
     gt_np = ground_truth.detach().cpu().numpy()
     
-    # Handle shape alignment
+    # Handle shape alignment for different model types
+    # Case 1: Ground truth is 3D (batch, 2, time), generated is 2D (batch, time) - A/B models
     if len(gt_np.shape) == 3 and len(gen_np.shape) == 2:
-        gt_np = gt_np[:, 1, :]  # Extract value dimension
+        gt_np = gt_np[:, 1, :]  # Extract value dimension from ground truth
+    
+    # Case 2: Generated is 3D (batch, 2, time), ground truth is 3D - C/D models  
+    elif len(gen_np.shape) == 3 and len(gt_np.shape) == 3:
+        # Extract value dimension from both (assume channel 1 is values)
+        gen_np = gen_np[:, 1, :] if gen_np.shape[1] == 2 else gen_np[:, 0, :]
+        gt_np = gt_np[:, 1, :] if gt_np.shape[1] == 2 else gt_np[:, 0, :]
+    
+    # Case 3: Generated is 3D (batch, 2, time), ground truth is 2D - C/D models vs A/B ground truth
+    elif len(gen_np.shape) == 3 and len(gt_np.shape) == 2:
+        # Extract value dimension from generated
+        gen_np = gen_np[:, 1, :] if gen_np.shape[1] == 2 else gen_np[:, 0, :]
     
     # Match dimensions
     min_samples = min(gen_np.shape[0], gt_np.shape[0])
     gen_np = gen_np[:min_samples]
     gt_np = gt_np[:min_samples]
     
+    # Ensure both are 2D and align time dimensions
     if len(gen_np.shape) == 2 and len(gt_np.shape) == 2:
         min_length = min(gen_np.shape[1], gt_np.shape[1])
         gen_np = gen_np[:, :min_length]
         gt_np = gt_np[:, :min_length]
+    elif len(gen_np.shape) == 1 and len(gt_np.shape) == 1:
+        # Both are 1D, align lengths
+        min_length = min(len(gen_np), len(gt_np))
+        gen_np = gen_np[:min_length]
+        gt_np = gt_np[:min_length]
     
     # Core metrics
     gen_flat = gen_np.flatten()
@@ -67,10 +85,10 @@ def compute_core_metrics(generated: torch.Tensor, ground_truth: torch.Tensor) ->
 
 def compute_empirical_std_analysis(trajectories: torch.Tensor, ground_truth: torch.Tensor) -> Dict[str, Any]:
     """
-    Compute empirical standard deviation analysis at each time step.
+    Compute empirical standard deviation analysis at each time step with C/D model support.
     
     Args:
-        trajectories: Generated trajectories, shape (n_traj, time_steps)
+        trajectories: Generated trajectories, shape (n_traj, time_steps) or (n_traj, 2, time_steps)
         ground_truth: Ground truth data, shape (batch, channels, time_steps)
         
     Returns:
@@ -78,6 +96,11 @@ def compute_empirical_std_analysis(trajectories: torch.Tensor, ground_truth: tor
     """
     traj_np = trajectories.detach().cpu().numpy()
     gt_np = ground_truth.detach().cpu().numpy()
+    
+    # Handle C/D series models that output 3D trajectories
+    if len(traj_np.shape) == 3:
+        # Extract value dimension from trajectories (assume channel 1 is values)
+        traj_np = traj_np[:, 1, :] if traj_np.shape[1] == 2 else traj_np[:, 0, :]
     
     # Extract ground truth values (remove time dimension)
     if len(gt_np.shape) == 3:
@@ -195,9 +218,14 @@ def evaluate_models_for_dataset(dataset_name: str):
             
             results.append(result)
             
-            # Store trajectory data for visualization
+            # Store trajectory data for visualization (handle C/D series models)
+            traj_np = trajectories.detach().cpu().numpy()
+            # Extract value dimension for C/D series models that output 3D
+            if len(traj_np.shape) == 3 and traj_np.shape[1] == 2:
+                traj_np = traj_np[:, 1, :]  # Extract value dimension
+            
             trajectory_data[model_id] = {
-                'trajectories': trajectories.detach().cpu().numpy(),
+                'trajectories': traj_np,
                 'empirical_std_generated': std_analysis['empirical_std_generated'],
                 'empirical_std_ground_truth': std_analysis['empirical_std_ground_truth'],
                 'time_steps': std_analysis['time_steps']
@@ -274,16 +302,8 @@ def evaluate_all_models_enhanced():
                     'trajectory_data': adv_trajectory_data
                 }
         
-        # 3. Evaluate latent SDE models
-        latent_sde_dataset_dir = f'results/{dataset_name}_latent_sde'
-        if os.path.exists(latent_sde_dataset_dir):
-            print(f"\n🧠 Evaluating latent SDE models for {dataset_name}...")
-            latent_sde_results_df, latent_sde_trajectory_data = evaluate_latent_sde_models_for_dataset(dataset_name)
-            if latent_sde_results_df is not None:
-                dataset_results['latent_sde'] = {
-                    'results_df': latent_sde_results_df,
-                    'trajectory_data': latent_sde_trajectory_data
-                }
+        # Note: V1/V2 models are now integrated into the main evaluation pipeline
+        # They are trained and saved in the same results/{dataset_name}/ directory as other models
         
         # Store results if we have any data for this dataset
         if dataset_results:
@@ -304,8 +324,7 @@ def evaluate_all_models_enhanced():
         dataset_data = all_results[dataset_name]
         non_adv_count = len(dataset_data.get('non_adversarial', {}).get('results_df', []))
         adv_count = len(dataset_data.get('adversarial', {}).get('results_df', []))
-        latent_sde_count = len(dataset_data.get('latent_sde', {}).get('results_df', []))
-        print(f"   {dataset_name}: {non_adv_count} non-adversarial, {adv_count} adversarial, {latent_sde_count} latent SDE models")
+        print(f"   {dataset_name}: {non_adv_count} models, {adv_count} adversarial models")
     
     return all_results
 
@@ -420,9 +439,14 @@ def evaluate_adversarial_models_for_dataset(dataset_name: str):
             
             results.append(result)
             
-            # Store trajectory data for visualization
+            # Store trajectory data for visualization (handle C/D series models)
+            traj_np = trajectories.detach().cpu().numpy()
+            # Extract value dimension for C/D series models that output 3D
+            if len(traj_np.shape) == 3 and traj_np.shape[1] == 2:
+                traj_np = traj_np[:, 1, :]  # Extract value dimension
+            
             trajectory_data[model_id] = {
-                'trajectories': trajectories.detach().cpu().numpy(),
+                'trajectories': traj_np,
                 'empirical_std_generated': std_analysis['empirical_std_generated'],
                 'empirical_std_ground_truth': std_analysis['empirical_std_ground_truth'],
                 'time_steps': std_analysis['time_steps']
@@ -464,174 +488,8 @@ def evaluate_adversarial_models_for_dataset(dataset_name: str):
     return results_df, trajectory_data
 
 
-def evaluate_latent_sde_models_for_dataset(dataset_name: str):
-    """Evaluate latent SDE models for a specific dataset."""
-    print(f"\n{'='*70}")
-    print(f"🧠 Enhanced Latent SDE Model Evaluation for {dataset_name.upper()} Dataset")
-    print(f"{'='*70}")
-    
-    # Setup latent SDE checkpoint manager
-    checkpoint_manager = create_checkpoint_manager(f'results/{dataset_name}_latent_sde')
-    
-    # Get list of trained latent SDE models
-    available_models = checkpoint_manager.list_available_models()
-    
-    if not available_models:
-        print(f"❌ No trained latent SDE models found for {dataset_name}")
-        return None, None
-    
-    print(f"Found {len(available_models)} trained latent SDE models for {dataset_name}:")
-    checkpoint_manager.print_available_models()
-    
-    # Setup evaluation data (same as other models)
-    print(f"\nSetting up evaluation data for {dataset_name}_latent_sde...")
-    if dataset_name == 'ou_process':
-        dataset = get_signal(num_samples=64)
-        eval_data = torch.stack([dataset[i][0] for i in range(32)])
-    else:
-        dataset = get_signal(num_samples=64)
-        eval_data = torch.stack([dataset[i][0] for i in range(32)])
-        print(f"   Note: Using OU process data as evaluation baseline for {dataset_name}")
-    
-    print(f"Evaluation data: {eval_data.shape}")
-    
-    # Import latent SDE functions
-    from models.latent_sde.implementations.v1_latent_sde import create_v1_model
-    from models.sdematching.implementations.v2_sde_matching import create_v2_model
-    
-    # Evaluate each latent SDE model
-    results = []
-    trajectory_data = {}
-    
-    for model_id in available_models:
-        print(f"\n{'='*50}")
-        print(f"Evaluating {model_id}")
-        print(f"{'='*50}")
-        
-        try:
-            # Recreate latent SDE model
-            print(f"Recreating latent SDE model {model_id}...")
-            
-            # Create example batch for model initialization
-            example_batch = eval_data[:8]
-            
-            # Create latent SDE model
-            if model_id == "V1":
-                latent_sde_model = create_v1_model(
-                    example_batch=example_batch,
-                    real_data=eval_data,
-                    theta=2.0,      # OU mean reversion rate
-                    mu=0.0,         # OU long-term mean
-                    sigma=0.5,      # OU volatility
-                    hidden_size=64  # Neural network size
-                )
-            elif model_id == "V2":
-                latent_sde_model = create_v2_model(
-                    example_batch=example_batch,
-                    real_data=eval_data,
-                    data_size=1,        # Observable dimension
-                    latent_size=4,      # Latent dimension
-                    hidden_size=64,     # Hidden layer size
-                    noise_std=0.1       # Observation noise
-                )
-            else:
-                print(f"❌ Unknown latent SDE model: {model_id}")
-                continue
-            
-            # Load the trained weights
-            model_dir = f'results/{dataset_name}_latent_sde/trained_models/{model_id}'
-            model_path = os.path.join(model_dir, 'model.pth')
-            if os.path.exists(model_path):
-                state_dict = torch.load(model_path, map_location='cpu')
-                latent_sde_model.load_state_dict(state_dict)
-                print(f"✅ Loaded trained weights for {model_id}")
-            else:
-                print(f"⚠️ No trained weights found for {model_id}, using initialized model")
-            
-            checkpoint_info = checkpoint_manager.get_checkpoint_info(model_id)
-            print(f"✅ Model {model_id} loaded successfully")
-            print(f"Model loaded: {sum(p.numel() for p in latent_sde_model.parameters()):,} parameters")
-            print(f"Training: Epoch {checkpoint_info['epoch']}, Loss {checkpoint_info['loss']:.6f}")
-            
-            # Generate evaluation samples
-            latent_sde_model.eval()
-            with torch.no_grad():
-                samples = latent_sde_model.generate_samples(64)
-                print(f"Generated samples: {samples.shape}")
-                
-                # Generate 20 trajectories for visualization
-                trajectories = latent_sde_model.generate_samples(20)
-                print(f"Generated trajectories for visualization: {trajectories.shape}")
-            
-            # Compute core metrics
-            metrics = compute_core_metrics(samples, eval_data)
-            
-            # Compute empirical std analysis
-            # Extract value dimension for latent SDE models (they generate (batch, 2, time_steps))
-            if trajectories.dim() == 3 and trajectories.shape[1] == 2:
-                trajectories_for_std = trajectories[:, 1, :]  # Extract value dimension
-            else:
-                trajectories_for_std = trajectories
-            
-            std_analysis = compute_empirical_std_analysis(trajectories_for_std, eval_data)
-            
-            # Combine results
-            result = {
-                'model_id': model_id,
-                'training_epoch': checkpoint_info['epoch'],
-                'training_loss': checkpoint_info['loss'],
-                'total_parameters': sum(p.numel() for p in latent_sde_model.parameters()),
-                'model_class': type(latent_sde_model).__name__,
-                **metrics,
-                'std_rmse': std_analysis['std_rmse'],
-                'std_correlation': std_analysis['std_correlation'],
-                'std_mean_absolute_error': std_analysis['std_mean_absolute_error']
-            }
-            
-            results.append(result)
-            
-            # Store trajectory data for visualization (use same processed trajectories)
-            trajectory_data[model_id] = {
-                'trajectories': trajectories_for_std.detach().cpu().numpy(),
-                'empirical_std_generated': std_analysis['empirical_std_generated'],
-                'empirical_std_ground_truth': std_analysis['empirical_std_ground_truth'],
-                'time_steps': std_analysis['time_steps']
-            }
-            
-            print(f"✅ {model_id} evaluation completed")
-            print(f"   RMSE: {metrics['rmse']:.4f}")
-            print(f"   KS Statistic: {metrics['ks_statistic']:.4f}")
-            print(f"   Std RMSE: {std_analysis['std_rmse']:.4f}")
-            print(f"   Std Correlation: {std_analysis['std_correlation']:.4f}")
-            
-        except Exception as e:
-            print(f"❌ Failed to evaluate {model_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
-    
-    if not results:
-        print("❌ No latent SDE models successfully evaluated")
-        return None, None
-    
-    # Save results to latent SDE evaluation directory
-    results_df = pd.DataFrame(results)
-    save_dir = f"results/{dataset_name}_latent_sde/evaluation"
-    os.makedirs(save_dir, exist_ok=True)
-    
-    results_path = os.path.join(save_dir, 'enhanced_models_evaluation.csv')
-    results_df.to_csv(results_path, index=False)
-    
-    print(f"\n{'='*60}")
-    print(f"ENHANCED EVALUATION COMPLETE FOR {dataset_name.upper()}_LATENT_SDE")
-    print(f"{'='*60}")
-    print(f"Results saved to: {results_path}")
-    print(f"Latent SDE models evaluated: {len(results)}")
-    
-    # Create enhanced visualizations for latent SDE models
-    create_enhanced_visualizations(results_df, trajectory_data, save_dir, f"{dataset_name}_latent_sde")
-    
-    return results_df, trajectory_data
+# Note: evaluate_latent_sde_models_for_dataset function removed
+# V1/V2 models are now integrated into the main evaluation pipeline
 
 
 def create_adversarial_comparison_analysis(all_results: Dict):

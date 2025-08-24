@@ -128,6 +128,18 @@ except ImportError as e:
         import traceback
         traceback.print_exc()
 
+try:
+    from models.latent_sde.implementations.v1_latent_sde import create_v1_model
+    V1_AVAILABLE = True
+except ImportError:
+    V1_AVAILABLE = False
+
+try:
+    from models.sdematching.implementations.v2_sde_matching import create_v2_model
+    V2_AVAILABLE = True
+except ImportError:
+    V2_AVAILABLE = False
+
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
 
@@ -259,10 +271,19 @@ class ModelTrainer:
                 # Forward pass
                 output = model(data)
                 
-                # Compute loss (handle D1 diffusion model specially)
+                # Compute loss (handle different model types)
                 if hasattr(model, 'compute_training_loss'):
-                    # D1 and other models with special training loss
-                    loss = model.compute_training_loss(output, data)
+                    # Check if it's a V1/V2 model (takes only data, no output)
+                    if hasattr(model, 'latent_sde') or 'V1' in str(type(model)) or 'V2' in str(type(model)):
+                        # V1/V2 models: compute_training_loss(data) -> returns (loss, components)
+                        loss_result = model.compute_training_loss(data)
+                        if isinstance(loss_result, tuple):
+                            loss = loss_result[0]  # Extract loss from tuple
+                        else:
+                            loss = loss_result
+                    else:
+                        # D1 and other models with special training loss
+                        loss = model.compute_training_loss(output, data)
                 else:
                     # Standard models
                     loss = model.compute_loss(output)
@@ -833,7 +854,9 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("C4", create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
         ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
         ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
-        ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE)
+        ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
+        ("V1", create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
+        ("V2", create_v2_model, "SDE Matching", V2_AVAILABLE)
     ]
     
     for model_id, create_fn, description, available in model_configs:
@@ -1251,7 +1274,9 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
         "C4": (create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
         "C5": (create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
         "C6": (create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
-        "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE)
+        "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
+        "V1": (create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
+        "V2": (create_v2_model, "SDE Matching", V2_AVAILABLE)
     }
     
     if model_id not in model_configs:

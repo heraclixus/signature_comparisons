@@ -252,6 +252,14 @@ class ModelCheckpoint:
             Recreated model or None if failed
         """
         try:
+            # Add src to path for imports
+            import sys
+            import os
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            src_dir = os.path.dirname(current_dir)
+            if src_dir not in sys.path:
+                sys.path.append(src_dir)
+            
             # Import required modules based on model_id
             if model_id == "A1":
                 from models.implementations.a1_final import create_a1_final_model
@@ -309,7 +317,89 @@ class ModelCheckpoint:
                 real_data = torch.randn(32, 2, 100)
                 return create_b2_model(example_batch, real_data)
             
-            # C1-C3 models removed - not truly generative
+            # C series models - Hybrid Latent SDE and SDE Matching
+            elif model_id == "C1":
+                from models.implementations.hybrid_latent_sde.c1_latent_sde_tstat import create_c1_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c1_model(example_batch, real_data)
+            
+            elif model_id == "C2":
+                from models.implementations.hybrid_latent_sde.c2_latent_sde_scoring import create_c2_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c2_model(example_batch, real_data)
+            
+            elif model_id == "C3":
+                from models.implementations.hybrid_latent_sde.c3_latent_sde_mmd import create_c3_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c3_model(example_batch, real_data)
+            
+            elif model_id == "C4":
+                from models.implementations.hybrid_latent_sde.c4_sde_matching_tstat import create_c4_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c4_model(example_batch, real_data)
+            
+            elif model_id == "C5":
+                from models.implementations.hybrid_latent_sde.c5_sde_matching_scoring import create_c5_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c5_model(example_batch, real_data)
+            
+            elif model_id == "C6":
+                from models.implementations.hybrid_latent_sde.c6_sde_matching_mmd import create_c6_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_c6_model(example_batch, real_data)
+            
+            # D series models - Time Series Diffusion
+            elif model_id == "D1":
+                from models.implementations.d1_diffusion import create_d1_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_d1_model(example_batch, real_data)
+            
+            # V series models - Latent SDE
+            elif model_id == "V1":
+                from models.latent_sde.implementations.v1_latent_sde import create_v1_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                
+                # Try to infer hidden_size from saved weights
+                hidden_size = 64  # default
+                try:
+                    model_path = os.path.join(self.models_dir, model_id, 'model.pth')
+                    if os.path.exists(model_path):
+                        state_dict = torch.load(model_path, map_location='cpu')
+                        # Infer hidden_size from the first layer weight shape
+                        if 'latent_sde.net.0.weight' in state_dict:
+                            hidden_size = state_dict['latent_sde.net.0.weight'].shape[0]
+                except:
+                    pass  # Use default if inference fails
+                
+                return create_v1_model(
+                    example_batch=example_batch,
+                    real_data=real_data,
+                    theta=2.0,      # OU mean reversion rate
+                    mu=0.0,         # OU long-term mean
+                    sigma=0.5,      # OU volatility
+                    hidden_size=hidden_size  # Inferred from saved weights
+                )
+            
+            elif model_id == "V2":
+                from models.sdematching.implementations.v2_sde_matching import create_v2_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_v2_model(
+                    example_batch=example_batch,
+                    real_data=real_data,
+                    data_size=1,        # Observable dimension
+                    latent_size=4,      # Latent dimension
+                    hidden_size=64,     # Hidden layer size
+                    noise_std=0.1       # Observation noise
+                )
             
             else:
                 print(f"❌ Unknown model_id: {model_id}")
