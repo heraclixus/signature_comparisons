@@ -1,0 +1,88 @@
+# Configuration for Distributional Diffusion Model Training
+# Following "Path Diffusion with Signature Kernels"
+
+# Model Configuration
+model:
+  dim: 1                    # d: dimension of each time point
+  seq_len: 64               # M: number of time points
+  gamma: 1.0                # OU process parameter γ
+  population_size: 8        # m: population size for training
+  lambda_param: 1.0         # λ: generalized kernel score parameter
+  signature_level: 4        # s: signature truncation level
+  kernel_type: "rbf"        # Signature kernel type ("rbf" or "linear")
+  dyadic_order: 4           # Dyadic partitioning order for PDE solver
+  sigma: 1.0                # RBF kernel bandwidth parameter
+  max_batch: 64             # Maximum batch size for kernel computation
+
+# Generator Network Configuration
+generator:
+  generator_type: "feedforward"  # "feedforward" or "sde_based"
+  data_size: 1              # Same as model.dim
+  seq_len: 64               # Same as model.seq_len
+  hidden_size: 128          # Hidden layer size
+  num_layers: 3             # Number of hidden layers
+  activation: "relu"        # Activation function
+  use_time_embedding: true  # Whether to use sinusoidal time embedding
+  time_embed_dim: 32        # Dimension of time embedding
+  dropout: 0.1              # Dropout rate
+  final_activation: "tanh"  # Final activation function
+
+# Dataset Configuration
+dataset:
+  type: "brownian"          # Dataset type: "brownian", "fbm", "heston", "ou_process"
+  batch_size: 32            # Training batch size
+  num_workers: 4            # Number of dataloader workers
+  pin_memory: true          # Pin memory for faster GPU transfer
+  
+  # Dataset-specific parameters
+  params:
+    num_samples: 10000      # Number of training samples
+    seq_len: 64             # Sequence length (should match model.seq_len)
+    dim: 1                  # Data dimension (should match model.dim)
+    dt: 0.01                # Time step size
+    mu: 0.0                 # Drift parameter (for relevant processes)
+    sigma: 1.0              # Volatility parameter
+
+# Training Configuration
+training:
+  num_epochs: 100           # Number of training epochs
+  learning_rate: 1e-4       # Learning rate
+  weight_decay: 0.0         # Weight decay for regularization
+  gradient_clip: 1.0        # Gradient clipping threshold (0 to disable)
+  
+  # Learning rate scheduling
+  use_scheduler: true       # Whether to use learning rate scheduler
+  scheduler_type: "cosine"  # Type of scheduler
+  
+  # Logging and checkpointing
+  log_interval: 10          # Log every N batches
+  save_interval: 20         # Save checkpoint every N epochs
+  checkpoint_dir: "./checkpoints/distributional_diffusion"
+
+# Evaluation Configuration
+evaluate: true
+evaluation:
+  batch_size: 64            # Evaluation batch size
+
+# Sample Generation Configuration
+generate_samples: true
+generation:
+  num_samples: 100          # Number of samples to generate
+  num_coarse_steps: 20      # Number of coarse time steps for DDIM sampling
+  
+# Output Configuration
+output_dir: "./outputs/distributional_diffusion"
+
+# Experiment Tracking (optional)
+wandb:
+  enabled: false            # Enable Weights & Biases logging
+  project: "distributional-diffusion"
+  entity: null              # Your W&B entity (username/team)
+  tags: ["signature-kernels", "diffusion", "time-series"]
+
+# Hardware Configuration
+device: "auto"              # "cpu", "cuda", or "auto"
+mixed_precision: false      # Use mixed precision training (requires CUDA)
+
+# Reproducibility
+seed: 42                    # Random seed for reproducibility

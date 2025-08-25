@@ -6,9 +6,11 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-
+*.pdf
 *.out
-
+*.tex
+*.png
+MODEL.md
 # Training results and models
 results/*/trained_models/
 results/*/logs/

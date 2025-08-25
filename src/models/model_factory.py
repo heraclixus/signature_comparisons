@@ -17,6 +17,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from .base_model import BaseSignatureModel, ModelConfig, GeneratorType, LossType, SignatureMethod
 from .model_registry import get_model_registry, register_model
 
+# Import D2 model
+try:
+    from .d2_distributional_diffusion import D2DistributionalDiffusion, create_d2_config
+    D2_AVAILABLE = True
+except ImportError:
+    D2_AVAILABLE = False
+
 # Import GenericSignatureModel (defined later in this file)
 # This will be available after the class definition
 
@@ -360,11 +367,17 @@ def register_predefined_models():
         priority="high"
     )
     
-    # C1-C3: RNN models removed - not truly generative
-    # D1-D2: Transformer models excluded - not suitable for stochastic processes
+    # D2: Distributional Diffusion + Signature Kernel Scoring (new implementation)
+    d2_config = None
+    if D2_AVAILABLE:
+        d2_config = create_d2_config()
     
     # Store configs for later registration (after GenericSignatureModel is defined)
-    return [a1_config, a2_config, b1_config, b3_config]
+    configs = [a1_config, a2_config, b1_config, b3_config]
+    if d2_config is not None:
+        configs.append(d2_config)
+    
+    return configs
 
 
 class GenericSignatureModel(BaseSignatureModel):
@@ -454,7 +467,11 @@ def _register_predefined_models():
     
     for config in configs:
         try:
-            register_model(config.model_id, GenericSignatureModel, config)
+            # Use D2 specific model class for D2, generic for others
+            if config.model_id == "D2" and D2_AVAILABLE:
+                register_model(config.model_id, D2DistributionalDiffusion, config)
+            else:
+                register_model(config.model_id, GenericSignatureModel, config)
         except ValueError:
             # Already registered
             pass

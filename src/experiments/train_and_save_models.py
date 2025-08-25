@@ -124,9 +124,15 @@ except ImportError as e:
     if "tsdiff" in str(e):
         print("   → This appears to be a TSDiff import issue")
         print("   → Check that relative imports are used in tsdiff modules")
-    else:
-        import traceback
-        traceback.print_exc()
+
+try:
+    from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
+    D2_AVAILABLE = True
+except ImportError as e:
+    D2_AVAILABLE = False
+    print(f"❌ D2 model import failed: {e}")
+    import traceback
+    traceback.print_exc()
 
 try:
     from models.latent_sde.implementations.v1_latent_sde import create_v1_model
@@ -641,6 +647,15 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 print(f"🔄 D1 exists but retraining due to --retrain-all flag")
             models_to_train.append(("D1", create_d1_model, "Time Series Diffusion Model"))
     
+    # Check D2 (Distributional Diffusion Model)
+    if D2_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("D2"):
+            print(f"⏭️ D2 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("D2"):
+                print(f"🔄 D2 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring"))
+    
     # C1-C3 models removed - not truly generative
     
     if not models_to_train:
@@ -855,6 +870,7 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
         ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
         ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
+        ("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
         ("V1", create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
         ("V2", create_v2_model, "SDE Matching", V2_AVAILABLE)
     ]
@@ -1275,6 +1291,7 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
         "C5": (create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
         "C6": (create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
         "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
+        "D2": (create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
         "V1": (create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
         "V2": (create_v2_model, "SDE Matching", V2_AVAILABLE)
     }

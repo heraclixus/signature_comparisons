@@ -12,6 +12,7 @@ Comprehensive comparison of signature-based methods for time series generation a
 | 🥈 | **B3** | Neural SDE + T-Stat | **5.21** | **Mean-reverting processes** |
 | 🥉 | **V2** | 🧠 SDE Matching | **5.32** | **Latent SDE champion** |
 | 4th | **D1** | 🌊 Diffusion | **6.46** | **Transformer-based generation** |
+| TBD | **D2** | 🌊 Distributional Diffusion | **TBD** | **Signature kernel scoring rules** |
 | 5th | **C4** | 🔬 Hybrid SDE + T-Stat | **7.22** | **Multi-objective training** |
 | 6th | **C5** | 🔬 Hybrid SDE + Scoring | **7.59** | **Hybrid signature methods** |
 | 7th | **C6** | 🔬 Hybrid SDE + MMD | **7.62** | **Advanced hybrid approach** |
@@ -28,6 +29,7 @@ Comprehensive comparison of signature-based methods for time series generation a
 - **B-Series**: Neural SDE generators with signature methods  
 - **C-Series**: 🔬 Hybrid models combining latent SDE + signatures
 - **D1**: 🌊 Diffusion model with transformer architecture
+- **D2**: 🌊 Distributional diffusion with signature kernel scoring rules
 - **V1/V2**: 🧠 Pure latent SDE models
 
 ### Key Architecture Components
