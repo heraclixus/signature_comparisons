@@ -248,11 +248,11 @@ class DistributionalDiffusion(nn.Module):
                 alpha_tau_k = 1 - tau_k  # ᾱ_{τ_k} = 1 - τ_k
                 alpha_tau_k_minus_1 = 1 - tau_k_minus_1
                 
-                D_tau_k = (x_tau - torch.sqrt(alpha_tau_k) * x_tilde_0) / torch.sqrt(1 - alpha_tau_k)
+                D_tau_k = (x_tau - torch.sqrt(alpha_tau_k) * x_tilde_0) / torch.sqrt(torch.clamp(1 - alpha_tau_k, min=1e-6))
                 
                 # Deterministic update: X_{τ_{k-1}} = √ᾱ_{τ_{k-1}} X̃_0 + √(1-ᾱ_{τ_{k-1}}) D_{τ_k}
                 x_tau = (torch.sqrt(alpha_tau_k_minus_1) * x_tilde_0 + 
-                        torch.sqrt(1 - alpha_tau_k_minus_1) * D_tau_k)
+                        torch.sqrt(torch.clamp(1 - alpha_tau_k_minus_1, min=1e-6)) * D_tau_k)
         
         return x_tau
     

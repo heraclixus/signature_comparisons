@@ -1,0 +1,127 @@
+{
+  "dataset": "brownian",
+  "timesteps": [
+    5,
+    10,
+    15
+  ],
+  "results": {
+    "D1": {
+      "5": {
+        "rmse": 13.166152954101562,
+        "ks_statistic": 0.65,
+        "ks_p_value": 3.108079571219943e-20,
+        "wasserstein_distance": 9.198707250794396,
+        "distributions_similar": 0.0,
+        "std_rmse": 12.72575855255127,
+        "std_correlation": -0.8437754966650242
+      },
+      "10": {
+        "rmse": 12.62218189239502,
+        "ks_statistic": 0.635,
+        "ks_p_value": 3.509090026610176e-38,
+        "wasserstein_distance": 8.40954544963286,
+        "distributions_similar": 0.0,
+        "std_rmse": 11.860349655151367,
+        "std_correlation": 0.2776217597173635
+      },
+      "15": {
+        "rmse": 13.194140434265137,
+        "ks_statistic": 0.6166666666666667,
+        "ks_p_value": 1.2958101522408484e-53,
+        "wasserstein_distance": 8.833623719733636,
+        "distributions_similar": 0.0,
+        "std_rmse": 12.634905815124512,
+        "std_correlation": 0.19932146052136093
+      }
+    },
+    "D2": {
+      "5": {
+        "rmse": 1115.19384765625,
+        "ks_statistic": 0.5265625,
+        "ks_p_value": 1.5277162533735043e-162,
+        "wasserstein_distance": 907.039139405525,
+        "distributions_similar": 0.0,
+        "std_rmse": 1090.4652099609375,
+        "std_correlation": -0.4068319281992115
+      },
+      "10": {
+        "rmse": 1094.2384033203125,
+        "ks_statistic": 0.5078125,
+        "ks_p_value": 1.2976009187029638e-150,
+        "wasserstein_distance": 827.3129251354176,
+        "distributions_similar": 0.0,
+        "std_rmse": 1065.6661376953125,
+        "std_correlation": 0.18283256569079284
+      },
+      "15": {
+        "rmse": 1085.8787841796875,
+        "ks_statistic": 0.59296875,
+        "ks_p_value": 3.009032808518092e-209,
+        "wasserstein_distance": 841.8917470464518,
+        "distributions_similar": 0.0,
+        "std_rmse": 1038.0982666015625,
+        "std_correlation": 0.20760790357599032
+      }
+    },
+    "D3": {
+      "5": {
+        "rmse": 1134.6961669921875,
+        "ks_statistic": 0.584375,
+        "ks_p_value": 8.520220312326484e-203,
+        "wasserstein_distance": 930.0465233333152,
+        "distributions_similar": 0.0,
+        "std_rmse": 1087.6661376953125,
+        "std_correlation": -0.7026542613641928
+      },
+      "10": {
+        "rmse": 1035.1260986328125,
+        "ks_statistic": 0.5609375,
+        "ks_p_value": 7.924725722181313e-186,
+        "wasserstein_distance": 861.4403694419924,
+        "distributions_similar": 0.0,
+        "std_rmse": 1002.5564575195312,
+        "std_correlation": 0.7707908033988327
+      },
+      "15": {
+        "rmse": 947.224609375,
+        "ks_statistic": 0.621875,
+        "ks_p_value": 6.847914396087696e-232,
+        "wasserstein_distance": 770.2126319124864,
+        "distributions_similar": 0.0,
+        "std_rmse": 900.362060546875,
+        "std_correlation": -0.15797973814833896
+      }
+    },
+    "D4": {
+      "5": {
+        "rmse": 1117.103515625,
+        "ks_statistic": 0.575,
+        "ks_p_value": 6.714044135198379e-196,
+        "wasserstein_distance": 860.499699247632,
+        "distributions_similar": 0.0,
+        "std_rmse": 1045.97509765625,
+        "std_correlation": -0.7202891231145147
+      },
+      "10": {
+        "rmse": 1107.2000732421875,
+        "ks_statistic": 0.534375,
+        "ks_p_value": 1.1347533862814464e-167,
+        "wasserstein_distance": 867.7253344170551,
+        "distributions_similar": 0.0,
+        "std_rmse": 1074.3138427734375,
+        "std_correlation": 0.7545610248925807
+      },
+      "15": {
+        "rmse": 1166.258056640625,
+        "ks_statistic": 0.5046875,
+        "ks_p_value": 1.1214502699057787e-148,
+        "wasserstein_distance": 937.1572362690733,
+        "distributions_similar": 0.0,
+        "std_rmse": 1094.9293212890625,
+        "std_correlation": 0.27061772951443336
+      }
+    }
+  },
+  "timestamp": "2025-08-25T09:53:05.874255"
+}

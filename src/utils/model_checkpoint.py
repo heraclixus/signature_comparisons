@@ -361,6 +361,24 @@ class ModelCheckpoint:
                 real_data = torch.randn(32, 2, 100)
                 return create_d1_model(example_batch, real_data)
             
+            elif model_id == "D2":
+                from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_d2_model(example_batch, real_data)
+            
+            elif model_id == "D3":
+                from models.implementations.d3_distributional_pde import create_model as create_d3_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_d3_model(example_batch, real_data)
+            
+            elif model_id == "D4":
+                from models.implementations.d4_distributional_truncated import create_model as create_d4_model
+                example_batch = torch.randn(32, 2, 100)
+                real_data = torch.randn(32, 2, 100)
+                return create_d4_model(example_batch, real_data)
+            
             # V series models - Latent SDE
             elif model_id == "V1":
                 from models.latent_sde.implementations.v1_latent_sde import create_v1_model
