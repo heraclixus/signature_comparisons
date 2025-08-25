@@ -161,29 +161,29 @@ class D4DistributionalDiffusion(D2DistributionalDiffusion):
     with reasonable accuracy.
     """
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config: ModelConfig):
         """Initialize D4 with truncated signature kernels."""
         if not TRUNCATED_AVAILABLE:
             raise ImportError("Truncated signature components not available")
         
-        # Extract signature-specific parameters
-        signature_depth = kwargs.pop('signature_depth', 3)
-        kernel_type = kwargs.pop('kernel_type', 'rbf')
-        sigma = kwargs.pop('sigma', 1.0)
-        max_batch = kwargs.pop('max_batch', 32)
+        # Extract signature-specific parameters from config
+        signature_depth = config.signature_config.get('signature_depth', 3)
+        kernel_type = config.signature_config.get('kernel_type', 'rbf')
+        sigma = config.signature_config.get('sigma', 1.0)
+        max_batch = config.signature_config.get('max_batch', 32)
         
         # Force truncated signature configuration
-        kwargs['signature_method'] = 'truncated'
+        config.signature_config['signature_method'] = 'truncated'
         
         # Initialize nn.Module directly (skip D2 initialization)
         nn.Module.__init__(self)
         
-        # Set basic parameters
-        self.dim = kwargs.get('dim', 1)
-        self.seq_len = kwargs.get('seq_len', 64)
-        self.population_size = kwargs.get('population_size', 4)
-        self.lambda_param = kwargs.get('lambda_param', 1.0)
-        self.gamma = kwargs.get('gamma', 1.0)
+        # Set basic parameters from config
+        self.dim = config.data_config.get('dim', 1)
+        self.seq_len = config.data_config.get('seq_len', 64)
+        self.population_size = config.loss_config.get('population_size', 4)
+        self.lambda_param = config.loss_config.get('lambda_param', 1.0)
+        self.gamma = config.generator_config.get('gamma', 1.0)
         
         # Initialize OU process and covariance (reuse from parent)
         self._init_ou_process()
@@ -205,9 +205,9 @@ class D4DistributionalDiffusion(D2DistributionalDiffusion):
             generator_type="feedforward",
             data_size=self.dim,
             seq_len=self.seq_len,
-            hidden_size=kwargs.get('hidden_size', 64),
-            num_layers=kwargs.get('num_layers', 2),
-            activation=kwargs.get('activation', 'relu')
+            hidden_size=config.generator_config.get('hidden_size', 64),
+            num_layers=config.generator_config.get('num_layers', 2),
+            activation=config.generator_config.get('activation', 'relu')
         )
     
     def _init_ou_process(self):
@@ -302,15 +302,8 @@ class D4Model(BaseSignatureModel):
         # Call parent init first
         super().__init__(config)
         
-        # Create the D4 model
-        self.d4_model = D4DistributionalDiffusion(
-            dim=config.data_config.get('dim', 1),
-            seq_len=config.data_config.get('seq_len', 64),
-            gamma=config.generator_config.get('gamma', 1.0),
-            population_size=config.loss_config.get('population_size', 4),
-            lambda_param=config.loss_config.get('lambda_param', 1.0),
-            **config.signature_config
-        )
+        # Create the D4 model with ModelConfig
+        self.d4_model = D4DistributionalDiffusion(config)
         
         # Set up compatibility attributes
         self.generator = self.d4_model.generator

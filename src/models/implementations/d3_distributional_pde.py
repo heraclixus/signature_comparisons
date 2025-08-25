@@ -50,26 +50,26 @@ class D3DistributionalDiffusion(D2DistributionalDiffusion):
     at the cost of slightly higher computational complexity.
     """
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config: ModelConfig):
         """Initialize D3 with PDE-solved signature kernels."""
         if not PDE_AVAILABLE:
             raise ImportError("PDE-solved signature components not available")
         
-        # Force PDE-solved signature configuration
-        kwargs['signature_method'] = 'pde_solved'
+        # Force PDE-solved signature configuration in config
+        config.signature_config['signature_method'] = 'pde_solved'
         
         # Initialize parent D2 model
-        super().__init__(*args, **kwargs)
+        super().__init__(config)
         
         # Replace signature scoring loss with PDE-solved version
-        self._init_pde_scoring_loss(**kwargs)
+        self._init_pde_scoring_loss(config)
     
-    def _init_pde_scoring_loss(self, **kwargs):
+    def _init_pde_scoring_loss(self, config: ModelConfig):
         """Initialize PDE-solved signature scoring loss."""
-        dyadic_order = kwargs.get('dyadic_order', 4)
-        kernel_type = kwargs.get('kernel_type', 'rbf')
-        sigma = kwargs.get('sigma', 1.0)
-        max_batch = kwargs.get('max_batch', 16)
+        dyadic_order = config.signature_config.get('dyadic_order', 4)
+        kernel_type = config.signature_config.get('kernel_type', 'rbf')
+        sigma = config.signature_config.get('sigma', 1.0)
+        max_batch = config.signature_config.get('max_batch', 16)
         
         # Create PDE-solved signature scoring loss
         self.scoring_loss = SigKernelScoringLoss(
@@ -98,15 +98,8 @@ class D3Model(D2Model):
         # Call parent init first
         BaseSignatureModel.__init__(self, config)
         
-        # Create the D3 model instead of D2
-        self.d2_model = D3DistributionalDiffusion(
-            dim=config.data_config.get('dim', 1),
-            seq_len=config.data_config.get('seq_len', 64),
-            gamma=config.generator_config.get('gamma', 1.0),
-            population_size=config.loss_config.get('population_size', 4),
-            lambda_param=config.loss_config.get('lambda_param', 1.0),
-            **config.signature_config
-        )
+        # Create the D3 model with ModelConfig (same as D2)
+        self.d2_model = D3DistributionalDiffusion(config)
         
         # Set up compatibility attributes
         self.generator = self.d2_model.generator
