@@ -135,6 +135,20 @@ except ImportError as e:
     traceback.print_exc()
 
 try:
+    from models.implementations.d3_distributional_pde import create_model as create_d3_model
+    D3_AVAILABLE = True
+except ImportError as e:
+    D3_AVAILABLE = False
+    print(f"❌ D3 model import failed: {e}")
+
+try:
+    from models.implementations.d4_distributional_truncated import create_model as create_d4_model
+    D4_AVAILABLE = True
+except ImportError as e:
+    D4_AVAILABLE = False
+    print(f"❌ D4 model import failed: {e}")
+
+try:
     from models.latent_sde.implementations.v1_latent_sde import create_v1_model
     V1_AVAILABLE = True
 except ImportError:
@@ -656,6 +670,24 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 print(f"🔄 D2 exists but retraining due to --retrain-all flag")
             models_to_train.append(("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring"))
     
+    # Check D3 (Distributional Diffusion + PDE-Solved Signatures)
+    if D3_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("D3"):
+            print(f"⏭️ D3 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("D3"):
+                print(f"🔄 D3 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("D3", create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels"))
+    
+    # Check D4 (Distributional Diffusion + Truncated Signatures)
+    if D4_AVAILABLE:
+        if not retrain_all and checkpoint_manager.model_exists("D4"):
+            print(f"⏭️ D4 already trained, skipping...")
+        else:
+            if retrain_all and checkpoint_manager.model_exists("D4"):
+                print(f"🔄 D4 exists but retraining due to --retrain-all flag")
+            models_to_train.append(("D4", create_d4_model, "Distributional Diffusion + Truncated Signature Kernels"))
+    
     # C1-C3 models removed - not truly generative
     
     if not models_to_train:
@@ -871,6 +903,8 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
         ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
         ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
         ("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
+        ("D3", create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels", D3_AVAILABLE),
+        ("D4", create_d4_model, "Distributional Diffusion + Truncated Signature Kernels", D4_AVAILABLE),
         ("V1", create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
         ("V2", create_v2_model, "SDE Matching", V2_AVAILABLE)
     ]
@@ -1292,6 +1326,8 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
         "C6": (create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
         "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
         "D2": (create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
+        "D3": (create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels", D3_AVAILABLE),
+        "D4": (create_d4_model, "Distributional Diffusion + Truncated Signature Kernels", D4_AVAILABLE),
         "V1": (create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
         "V2": (create_v2_model, "SDE Matching", V2_AVAILABLE)
     }

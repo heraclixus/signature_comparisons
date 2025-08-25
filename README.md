@@ -13,6 +13,8 @@ Comprehensive comparison of signature-based methods for time series generation a
 | 🥉 | **V2** | 🧠 SDE Matching | **5.32** | **Latent SDE champion** |
 | 4th | **D1** | 🌊 Diffusion | **6.46** | **Transformer-based generation** |
 | TBD | **D2** | 🌊 Distributional Diffusion | **TBD** | **Signature kernel scoring rules** |
+| TBD | **D3** | 🌊 Distributional Diffusion (PDE) | **TBD** | **PDE-solved signature kernels** |
+| TBD | **D4** | 🌊 Distributional Diffusion (Fast) | **TBD** | **Truncated signature kernels** |
 | 5th | **C4** | 🔬 Hybrid SDE + T-Stat | **7.22** | **Multi-objective training** |
 | 6th | **C5** | 🔬 Hybrid SDE + Scoring | **7.59** | **Hybrid signature methods** |
 | 7th | **C6** | 🔬 Hybrid SDE + MMD | **7.62** | **Advanced hybrid approach** |
@@ -30,6 +32,8 @@ Comprehensive comparison of signature-based methods for time series generation a
 - **C-Series**: 🔬 Hybrid models combining latent SDE + signatures
 - **D1**: 🌊 Diffusion model with transformer architecture
 - **D2**: 🌊 Distributional diffusion with signature kernel scoring rules
+- **D3**: 🌊 Distributional diffusion with PDE-solved signature kernels
+- **D4**: 🌊 Distributional diffusion with truncated signature kernels (fastest)
 - **V1/V2**: 🧠 Pure latent SDE models
 
 ### Key Architecture Components

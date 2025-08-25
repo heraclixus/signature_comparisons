@@ -127,6 +127,10 @@ class SignatureScoringLoss(nn.Module):
         if m < 2:
             raise ValueError(f"Population size must be >= 2, got {m}")
         
+        # Process in smaller chunks if batch is too large for memory efficiency
+        if batch_size > self.max_batch:
+            return self._compute_chunked_loss(generated_samples, real_sample)
+        
         total_loss = 0.0
         
         for b in range(batch_size):
@@ -141,23 +145,63 @@ class SignatureScoringLoss(nn.Module):
             
             # Compute pairwise signature kernels between generated samples
             K_XX = self.sig_kernel.compute_Gram(
-                gen_paths, gen_paths, sym=True, max_batch=self.max_batch
+                gen_paths, gen_paths, sym=True, max_batch=min(self.max_batch, m)
             )
             
             # Self-similarity term: (λ/2) * (1/[m(m-1)]) * Σ_{i≠j} k_sig(X̃_0^(i), X̃_0^(j))
-            # Remove diagonal elements (i=j) and normalize
-            mask = ~torch.eye(m, dtype=torch.bool, device=K_XX.device)
-            self_sim = K_XX[mask].sum() / (m * (m - 1))
+            # More efficient: total_sum - diagonal_sum instead of masking
+            diagonal_sum = torch.diag(K_XX).sum()
+            total_sum = K_XX.sum()
+            off_diagonal_sum = total_sum - diagonal_sum
+            self_sim = off_diagonal_sum / (m * (m - 1))
             
             # Cross-similarity term: (2/m) * Σ_i k_sig(X̃_0^(i), X_0)
             K_XY = self.sig_kernel.compute_Gram(
-                gen_paths, real_path, sym=False, max_batch=self.max_batch
+                gen_paths, real_path, sym=False, max_batch=min(self.max_batch, m)
             )
             cross_sim = K_XY.mean()
             
             # Signature scoring rule with λ parameter (following paper formulation)
             batch_loss = (self.lambda_param / 2.0) * self_sim - cross_sim
             total_loss += batch_loss
+        
+        return total_loss / batch_size
+    
+    def _compute_chunked_loss(self, generated_samples: torch.Tensor, real_sample: torch.Tensor) -> torch.Tensor:
+        """Compute loss in chunks for large batches."""
+        batch_size = generated_samples.shape[0]
+        chunk_size = self.max_batch
+        total_loss = 0.0
+        
+        for i in range(0, batch_size, chunk_size):
+            end_idx = min(i + chunk_size, batch_size)
+            chunk_gen = generated_samples[i:end_idx]
+            chunk_real = real_sample[i:end_idx]
+            
+            # Create a temporary loss instance to avoid recursion
+            chunk_batch_size = end_idx - i
+            chunk_loss = 0.0
+            
+            for b in range(chunk_batch_size):
+                gen_batch = chunk_gen[b]
+                real_batch = chunk_real[b:b+1]
+                
+                gen_paths = gen_batch.transpose(1, 2).double()
+                real_path = real_batch.transpose(1, 2).double()
+                
+                m = gen_batch.shape[0]
+                K_XX = self.sig_kernel.compute_Gram(gen_paths, gen_paths, sym=True, max_batch=min(self.max_batch, m))
+                K_XY = self.sig_kernel.compute_Gram(gen_paths, real_path, sym=False, max_batch=min(self.max_batch, m))
+                
+                diagonal_sum = torch.diag(K_XX).sum()
+                total_sum = K_XX.sum()
+                self_sim = (total_sum - diagonal_sum) / (m * (m - 1))
+                cross_sim = K_XY.mean()
+                
+                batch_loss = (self.lambda_param / 2.0) * self_sim - cross_sim
+                chunk_loss += batch_loss
+            
+            total_loss += chunk_loss
         
         return total_loss / batch_size
 

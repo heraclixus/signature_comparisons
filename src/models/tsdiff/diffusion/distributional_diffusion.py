@@ -107,7 +107,7 @@ class DistributionalDiffusion(nn.Module):
         self.register_buffer('Sigma_full', Sigma_full.contiguous())
         self.register_buffer('L_full', L_full.contiguous())
         
-        # Initialize signature scoring loss
+        # Initialize signature scoring loss with optimized parameters
         if SIGNATURE_LOSS_AVAILABLE:
             self.scoring_loss = create_signature_scoring_loss(
                 method="direct",
@@ -116,7 +116,7 @@ class DistributionalDiffusion(nn.Module):
                 kernel_type=kernel_type,
                 dyadic_order=dyadic_order,
                 sigma=sigma,
-                max_batch=max_batch
+                max_batch=min(max_batch, 16)  # Limit to 16 for faster computation
             )
         else:
             raise ImportError("SignatureScoringLoss not available")
