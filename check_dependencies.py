@@ -135,27 +135,101 @@ def main():
     else:
         print(f"\n🎉 All dependencies available! Project should work correctly.")
     
-    # Test critical imports
-    print(f"\n🧪 Testing critical imports...")
-    try:
-        print(f"   Testing D1 model import...", end=" ")
-        from src.models.implementations.d1_diffusion import create_d1_model
-        print("✅")
-    except Exception as e:
-        print(f"❌")
-        print(f"      Error: {e}")
-        print(f"      This suggests missing dependencies or import issues.")
-        return 1
+    # Test all model imports
+    print(f"\n🧪 Testing all model imports...")
     
+    models_to_test = [
+        ("A1", "src.models.implementations.a1_final", "create_a1_final_model"),
+        ("A2", "src.models.implementations.a2_canned_scoring", "create_a2_model"),
+        ("A3", "src.models.implementations.a3_canned_mmd", "create_a3_model"),
+        ("A4", "src.models.implementations.a4_canned_logsig", "create_a4_model"),
+        ("B1", "src.models.implementations.b1_nsde_scoring", "create_b1_model"),
+        ("B2", "src.models.implementations.b2_nsde_mmd_pde", "create_b2_model"),
+        ("B3", "src.models.implementations.b3_nsde_tstatistic", "create_b3_model"),
+        ("B4", "src.models.implementations.b4_nsde_mmd", "create_b4_model"),
+        ("B5", "src.models.implementations.b5_nsde_scoring", "create_b5_model"),
+        ("C1", "src.models.implementations.hybrid_latent_sde.c1_latent_sde_tstat", "create_c1_model"),
+        ("C2", "src.models.implementations.hybrid_latent_sde.c2_latent_sde_scoring", "create_c2_model"),
+        ("C3", "src.models.implementations.hybrid_latent_sde.c3_latent_sde_mmd", "create_c3_model"),
+        ("C4", "src.models.implementations.hybrid_latent_sde.c4_sde_matching_tstat", "create_c4_model"),
+        ("C5", "src.models.implementations.hybrid_latent_sde.c5_sde_matching_scoring", "create_c5_model"),
+        ("C6", "src.models.implementations.hybrid_latent_sde.c6_sde_matching_mmd", "create_c6_model"),
+        ("D1", "src.models.implementations.d1_diffusion", "create_d1_model"),
+        ("D2", "src.models.implementations.d2_distributional_diffusion", "create_model"),
+        ("D3", "src.models.implementations.d3_distributional_pde", "create_model"),
+        ("D4", "src.models.implementations.d4_distributional_truncated", "create_model"),
+        ("V1", "src.models.latent_sde.implementations.v1_latent_sde", "create_v1_model"),
+        ("V2", "src.models.sdematching.implementations.v2_sde_matching", "create_v2_model"),
+    ]
+    
+    available_models = []
+    failed_models = []
+    
+    for model_id, module_path, function_name in models_to_test:
+        try:
+            print(f"   Testing {model_id:<3} model import...", end=" ")
+            module = importlib.import_module(module_path)
+            create_fn = getattr(module, function_name)
+            print("✅")
+            available_models.append(model_id)
+        except Exception as e:
+            print("❌")
+            print(f"      └─ Error: {e}")
+            failed_models.append((model_id, str(e)))
+    
+    # Test signature computations
     try:
         print(f"   Testing signature computations...", end=" ")
         from src.signatures import TruncatedSignature
         print("✅")
     except Exception as e:
-        print(f"❌")
-        print(f"      Error: {e}")
+        print("❌")
+        print(f"      └─ Error: {e}")
     
-    print(f"\n✨ Dependency check complete!")
+    # Summary of model availability
+    print(f"\n📋 Model Availability Summary:")
+    print(f"   ✅ Available models ({len(available_models)}): {', '.join(available_models)}")
+    
+    if failed_models:
+        print(f"   ❌ Failed models ({len(failed_models)}):")
+        for model_id, error in failed_models:
+            print(f"      • {model_id}: {error}")
+    
+    # Test training script compatibility
+    print(f"\n🔧 Testing training script model detection...")
+    try:
+        # Simulate the training script's model detection logic
+        sys.path.append('src')
+        
+        # Import the exact same way as train_and_save_models.py
+        model_configs = {}
+        
+        # Test D4 specifically since that was the reported issue
+        try:
+            from models.implementations.d4_distributional_truncated import create_model as create_d4_model
+            D4_AVAILABLE = True
+            model_configs["D4"] = (create_d4_model, "Distributional Diffusion + Truncated Signature Kernels", D4_AVAILABLE)
+            print(f"   ✅ D4 detected by training script logic")
+        except ImportError as e:
+            print(f"   ❌ D4 failed in training script context: {e}")
+        
+        # Show what the training script would see
+        available_in_training = [k for k, (_, _, available) in model_configs.items() if available]
+        print(f"   📊 Models available to training script: {available_in_training}")
+        
+    except Exception as e:
+        print(f"   ❌ Training script compatibility test failed: {e}")
+    
+    print(f"\n✨ Model availability check complete!")
+    
+    # Return error code if critical models failed
+    critical_models = ["A1", "A2", "B1", "D1", "D2"]  # Core models that should always work
+    failed_critical = [m for m, _ in failed_models if m in critical_models]
+    
+    if failed_critical:
+        print(f"\n🚨 CRITICAL: Core models failed: {failed_critical}")
+        return 1
+    
     return 0
 
 if __name__ == "__main__":

@@ -24,6 +24,12 @@ try:
 except ImportError:
     D1_AVAILABLE = False
 
+try:
+    from .d4_distributional_truncated import D4Model, create_d4_model
+    D4_AVAILABLE = True
+except ImportError:
+    D4_AVAILABLE = False
+
 # Import hybrid latent SDE models
 try:
     from .hybrid_latent_sde import C1Model, create_c1_model
@@ -78,6 +84,8 @@ def get_all_model_creators():
     # Add diffusion models if available
     if D1_AVAILABLE:
         creators['D1'] = create_d1_model
+    if D4_AVAILABLE:
+        creators['D4'] = create_d4_model
     
     # Add hybrid models if available
     if C1_AVAILABLE:

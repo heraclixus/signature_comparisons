@@ -183,6 +183,12 @@ class DistributionalGenerator(nn.Module):
         """
         batch_size = x_t.shape[0]
         
+        # Ensure all inputs are on the same device as the model
+        device = next(self.parameters()).device
+        x_t = x_t.to(device)
+        t = t.to(device)
+        z = z.to(device)
+        
         # Flatten path inputs
         x_t_flat = x_t.view(batch_size, -1)  # (batch, dim*seq_len)
         z_flat = z.view(batch_size, -1)      # (batch, dim*seq_len)
@@ -234,8 +240,13 @@ class SinusoidalTimeEmbedding(nn.Module):
         Returns:
             Time embeddings (batch_size, embed_dim)
         """
+        # Ensure t is on the same device as the model
+        t = t.to(self.frequencies.device)
+        
         # Normalize time to [0, 1] if needed
-        t_normalized = t / self.max_time
+        # Ensure max_time is also on the same device
+        max_time_tensor = torch.tensor(self.max_time, device=t.device, dtype=t.dtype)
+        t_normalized = t / max_time_tensor
         
         # Compute sinusoidal embeddings
         args = t_normalized.unsqueeze(-1) * self.frequencies.unsqueeze(0)
