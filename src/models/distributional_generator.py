@@ -183,11 +183,21 @@ class DistributionalGenerator(nn.Module):
         """
         batch_size = x_t.shape[0]
         
+        # Determine the correct device for the model
+        try:
+            device = next(self.parameters()).device
+        except StopIteration:
+            # Fallback if no parameters (shouldn't happen in practice)
+            device = torch.device('cpu')
+        
         # Ensure all inputs are on the same device as the model
-        device = next(self.parameters()).device
         x_t = x_t.to(device)
-        t = t.to(device)
+        t = t.to(device) 
         z = z.to(device)
+        
+        # Debug info for device mismatch issues (can be removed in production)
+        if hasattr(self, '_debug_device_info'):
+            print(f"Debug: Model device={device}, x_t={x_t.device}, t={t.device}, z={z.device}")
         
         # Flatten path inputs
         x_t_flat = x_t.view(batch_size, -1)  # (batch, dim*seq_len)
@@ -199,6 +209,7 @@ class DistributionalGenerator(nn.Module):
         
         if self.use_time_embedding:
             t_embed = self.time_embedding(t.squeeze(-1))  # (batch, time_embed_dim)
+            t_embed = t_embed.to(device)  # Ensure output is on correct device
         else:
             t_embed = t  # (batch, 1)
         
@@ -240,12 +251,24 @@ class SinusoidalTimeEmbedding(nn.Module):
         Returns:
             Time embeddings (batch_size, embed_dim)
         """
+        # Determine the correct device - prefer parameters device, fallback to frequencies
+        try:
+            device = next(self.parameters()).device
+        except StopIteration:
+            device = self.frequencies.device
+        
         # Ensure t is on the same device as the model
-        t = t.to(self.frequencies.device)
+        t = t.to(device)
+        
+        # Ensure frequencies buffer is on the correct device (handle buffer device mismatch)
+        if self.frequencies.device != device:
+            # Re-register the buffer on the correct device
+            frequencies_corrected = self.frequencies.to(device)
+            self.register_buffer('frequencies', frequencies_corrected)
         
         # Normalize time to [0, 1] if needed
         # Ensure max_time is also on the same device
-        max_time_tensor = torch.tensor(self.max_time, device=t.device, dtype=t.dtype)
+        max_time_tensor = torch.tensor(self.max_time, device=device, dtype=t.dtype)
         t_normalized = t / max_time_tensor
         
         # Compute sinusoidal embeddings
