@@ -186,18 +186,30 @@ class DistributionalDiffusion(nn.Module):
         # Step 3: Sample X_{t_i}^i using forward diffusion process
         x_t = self.forward_diffusion(x0, t)
         
-        # Step 4 & 5: Sample ξ_{ij} ~ N(0, I_{Md}) and generate X̃_0^{(i)}
-        generated_samples = []
-        for _ in range(self.population_size):
-            # Sample ξ ~ N(0, I_{Md})
-            xi = torch.randn_like(x_t)
-            
-            # Generate sample from learned distribution P_θ(·|X_t, t, ξ)
-            x_gen = generator(x_t, t, xi)
-            generated_samples.append(x_gen)
+        # Step 4 & 5: VECTORIZED population generation for massive speedup
+        # Instead of sequential generation, create entire population in parallel
         
-        # Stack samples: (batch, population_size, dim, seq_len)
-        generated_samples = torch.stack(generated_samples, dim=1)
+        # Create all noise samples at once: (batch_size * population_size, dim, seq_len)
+        xi_all = torch.randn(
+            batch_size * self.population_size, self.dim, self.seq_len, 
+            device=x_t.device, dtype=x_t.dtype
+        )
+        
+        # Expand x_t and t to match population size
+        # x_t: (batch_size, dim, seq_len) -> (batch_size * population_size, dim, seq_len)
+        x_t_expanded = x_t.unsqueeze(1).repeat(1, self.population_size, 1, 1).view(
+            batch_size * self.population_size, self.dim, self.seq_len
+        )
+        
+        # t: (batch_size,) -> (batch_size * population_size,)
+        t_expanded = t.unsqueeze(1).repeat(1, self.population_size).view(-1)
+        
+        # SINGLE VECTORIZED generator call instead of population_size sequential calls
+        # This is the key optimization: 1 call instead of population_size calls
+        x_gen_all = generator(x_t_expanded, t_expanded, xi_all)
+        
+        # Reshape back to population format: (batch_size, population_size, dim, seq_len)
+        generated_samples = x_gen_all.view(batch_size, self.population_size, self.dim, self.seq_len)
         
         # Step 6: Compute L_sig using signature scoring rule
         loss = self.scoring_loss(generated_samples, x0)
@@ -295,14 +307,20 @@ class DistributionalDiffusion(nn.Module):
                 t_batch = t.expand(batch_size)
                 x_t = self.forward_diffusion(x, t_batch)
                 
-                # Generate samples from learned distribution
-                generated_samples = []
-                for _ in range(self.population_size):
-                    xi = torch.randn_like(x_t)
-                    x_gen = generator(x_t, t_batch, xi)
-                    generated_samples.append(x_gen)
+                # VECTORIZED population generation for log_prob estimation
+                xi_all = torch.randn(
+                    batch_size * self.population_size, self.dim, self.seq_len,
+                    device=x_t.device, dtype=x_t.dtype
+                )
                 
-                generated_samples = torch.stack(generated_samples, dim=1)
+                x_t_expanded = x_t.unsqueeze(1).repeat(1, self.population_size, 1, 1).view(
+                    batch_size * self.population_size, self.dim, self.seq_len
+                )
+                t_batch_expanded = t_batch.unsqueeze(1).repeat(1, self.population_size).view(-1)
+                
+                # Single vectorized call
+                x_gen_all = generator(x_t_expanded, t_batch_expanded, xi_all)
+                generated_samples = x_gen_all.view(batch_size, self.population_size, self.dim, self.seq_len)
                 
                 # Compute negative scoring rule as proxy for log probability
                 score = self.scoring_loss(generated_samples, x)
