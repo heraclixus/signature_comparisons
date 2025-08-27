@@ -190,9 +190,13 @@ class SigKernelScoringLoss:
     
     def _compute_sigkernel_scoring(self, generated_paths: torch.Tensor, real_paths: torch.Tensor) -> torch.Tensor:
         """Compute scoring rule using signature kernel with aggressive memory optimization."""
+        # Get the device from input tensors
+        device = generated_paths.device
+        
         # Convert to sigkernel format: (batch, time, channels)
-        gen_paths = generated_paths.transpose(1, 2).double()  # Ensure double precision
-        real_paths = real_paths.transpose(1, 2).double()
+        # Ensure double precision while preserving device
+        gen_paths = generated_paths.transpose(1, 2).double().to(device)
+        real_paths = real_paths.transpose(1, 2).double().to(device)
         
         try:
             # AGGRESSIVE MEMORY OPTIMIZATION

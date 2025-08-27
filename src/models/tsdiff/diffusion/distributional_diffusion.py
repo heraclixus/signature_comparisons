@@ -156,7 +156,9 @@ class DistributionalDiffusion(nn.Module):
         
         # Apply OU covariance structure
         # noise = σ_t^{1/2} * L_full @ z
-        noise = sigma_t.sqrt() * (self.L_full @ z.unsqueeze(-1)).squeeze(-1)
+        # Ensure L_full is on the same device as the input tensors
+        L_full_device = self.L_full.to(x0_flat.device)
+        noise = sigma_t.sqrt() * (L_full_device @ z.unsqueeze(-1)).squeeze(-1)
         
         # Apply forward diffusion: X_t = α_t * X_0 + noise
         x_t_flat = alpha_t * x0_flat + noise
@@ -244,9 +246,13 @@ class DistributionalDiffusion(nn.Module):
                 t_tensor = tau_k.expand(num_samples).to(device)
                 x_tilde_0 = generator(x_tau, t_tensor, z)
                 
+                # Ensure x_tilde_0 is on the correct device
+                x_tilde_0 = x_tilde_0.to(device)
+                
                 # Compute D_{τ_k} = (X_{τ_k} - √ᾱ_{τ_k} X̃_0) / √(1-ᾱ_{τ_k})
-                alpha_tau_k = 1 - tau_k  # ᾱ_{τ_k} = 1 - τ_k
-                alpha_tau_k_minus_1 = 1 - tau_k_minus_1
+                # Ensure alpha values are tensors on the correct device
+                alpha_tau_k = (1 - tau_k).to(device=device, dtype=x_tau.dtype)  # ᾱ_{τ_k} = 1 - τ_k
+                alpha_tau_k_minus_1 = (1 - tau_k_minus_1).to(device=device, dtype=x_tau.dtype)
                 
                 D_tau_k = (x_tau - torch.sqrt(alpha_tau_k) * x_tilde_0) / torch.sqrt(torch.clamp(1 - alpha_tau_k, min=1e-6))
                 
