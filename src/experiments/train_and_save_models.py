@@ -766,10 +766,27 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
                 }
             else:
                 # Standard training with checkpointing
+                # Use reduced batch size for D2/D3 models to avoid sigkernel thread limit
+                current_train_loader = train_loader
+                if model_id in ['D2', 'D3']:
+                    print(f"  🔧 Using reduced batch size for {model_id} to avoid sigkernel thread limit")
+                    # Get original batch size and halve it
+                    original_batch_size = train_loader.batch_size
+                    reduced_batch_size = max(8, original_batch_size // 2)  # Minimum batch size of 8
+                    print(f"     Batch size: {original_batch_size} → {reduced_batch_size}")
+                    
+                    # Create new DataLoader with reduced batch size
+                    current_train_loader = torch.utils.data.DataLoader(
+                        train_loader.dataset, 
+                        batch_size=reduced_batch_size, 
+                        shuffle=True, 
+                        num_workers=0
+                    )
+                
                 history = trainer.train_with_checkpointing(
                     model=model,
                     model_id=model_id,
-                    train_loader=train_loader,
+                    train_loader=current_train_loader,
                     optimizer=optimizer,
                     num_epochs=num_epochs,
                     save_every=25,
@@ -1137,6 +1154,12 @@ def train_model_standard(model, model_id: str, checkpoint_manager, train_data: t
     
     # Create data loader
     batch_size = 128  # Use consistent batch size of 128 for all models
+    # Reduce batch size for D2/D3 models to avoid sigkernel thread limit
+    if model_id in ['D2', 'D3']:
+        original_batch_size = batch_size
+        batch_size = max(8, batch_size // 2)  # Minimum batch size of 8
+        print(f"  🔧 Reducing batch size for {model_id}: {original_batch_size} → {batch_size}")
+    
     dataset = torchdata.TensorDataset(train_data, torch.zeros(train_data.shape[0], device=TRAINING_DEVICE))  # dummy labels
     train_loader = torchdata.DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
@@ -1429,8 +1452,20 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
     
     # Setup training data
     try:
+        # Reduce batch size for D2/D3 models to avoid sigkernel thread limit
+        if model_id in ['D2', 'D3']:
+            logger.info(f"🔧 Reducing batch size for {model_id} model to avoid sigkernel thread limit")
+            
         if dataset_name == 'ou_process':
-            train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name)
+            # For OU process, modify batch size in setup_training_data call
+            if model_id in ['D2', 'D3']:
+                # Get default batch size and halve it
+                default_batch_size = TEST_MODE_PARAMS['batch_size'] if TEST_MODE_PARAMS else 128
+                reduced_batch_size = max(8, default_batch_size // 2)  # Minimum batch size of 8
+                logger.info(f"   Batch size: {default_batch_size} → {reduced_batch_size}")
+                train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name, batch_size=reduced_batch_size)
+            else:
+                train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name)
         else:
             # Setup data for other datasets
             dataset_manager = MultiDatasetManager(use_persistence=True)
@@ -1442,8 +1477,13 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
             signals = torch.stack([dataset_data[i][0] for i in range(min(test_samples, len(dataset_data)))])
             example_batch = train_data[:32]  # Use first 32 samples as example batch
             
-            # Create data loader
+            # Create data loader with reduced batch size for D2/D3
             batch_size = TEST_MODE_PARAMS['batch_size'] if TEST_MODE_PARAMS else 128
+            if model_id in ['D2', 'D3']:
+                original_batch_size = batch_size
+                batch_size = max(8, batch_size // 2)  # Minimum batch size of 8
+                logger.info(f"   Batch size: {original_batch_size} → {batch_size}")
+            
             dataset_tensor = torch.utils.data.TensorDataset(train_data, torch.zeros(train_data.shape[0]))
             train_loader = torch.utils.data.DataLoader(dataset_tensor, batch_size=batch_size, shuffle=True)
             
