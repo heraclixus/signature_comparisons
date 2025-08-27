@@ -140,8 +140,10 @@ class SignatureScoringLoss(nn.Module):
             
             # Convert to sigkernel format: (samples, time, channels)
             # sigkernel expects (batch, time, channels)
-            gen_paths = gen_batch.transpose(1, 2).double()  # (m, seq_len, dim)
-            real_path = real_batch.transpose(1, 2).double()  # (1, seq_len, dim)
+            # Get device from input tensors and ensure double precision preserves device
+            device = gen_batch.device
+            gen_paths = gen_batch.transpose(1, 2).double().to(device)  # (m, seq_len, dim)
+            real_path = real_batch.transpose(1, 2).double().to(device)  # (1, seq_len, dim)
             
             # Compute pairwise signature kernels between generated samples
             K_XX = self.sig_kernel.compute_Gram(
@@ -186,8 +188,10 @@ class SignatureScoringLoss(nn.Module):
                 gen_batch = chunk_gen[b]
                 real_batch = chunk_real[b:b+1]
                 
-                gen_paths = gen_batch.transpose(1, 2).double()
-                real_path = real_batch.transpose(1, 2).double()
+                # Get device from input tensors and ensure double precision preserves device
+                device = gen_batch.device
+                gen_paths = gen_batch.transpose(1, 2).double().to(device)
+                real_path = real_batch.transpose(1, 2).double().to(device)
                 
                 m = gen_batch.shape[0]
                 K_XX = self.sig_kernel.compute_Gram(gen_paths, gen_paths, sym=True, max_batch=min(self.max_batch, m))
