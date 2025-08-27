@@ -137,16 +137,22 @@ except ImportError as e:
 try:
     from models.implementations.d3_distributional_pde import create_model as create_d3_model
     D3_AVAILABLE = True
+    print(f"✅ D3 model import successful")
 except ImportError as e:
     D3_AVAILABLE = False
     print(f"❌ D3 model import failed: {e}")
+    import traceback
+    traceback.print_exc()
 
 try:
     from models.implementations.d4_distributional_truncated import create_model as create_d4_model
     D4_AVAILABLE = True
+    print(f"✅ D4 model import successful")
 except ImportError as e:
     D4_AVAILABLE = False
     print(f"❌ D4 model import failed: {e}")
+    import traceback
+    traceback.print_exc()
 
 try:
     from models.latent_sde.implementations.v1_latent_sde import create_v1_model
@@ -162,6 +168,25 @@ except ImportError:
 
 # C1-C3 (GRU) models removed - not truly generative
 # Diversity testing revealed they don't produce diverse random sample paths
+
+# Print availability summary for debugging
+print(f"\n📊 Model Availability Summary:")
+print(f"   A-series: A1={A1_AVAILABLE}, A2={A2_AVAILABLE}, A3={A3_AVAILABLE}, A4={A4_AVAILABLE}")
+print(f"   B-series: B1={B1_AVAILABLE}, B2={B2_AVAILABLE}, B3={B3_AVAILABLE}, B4={B4_AVAILABLE}, B5={B5_AVAILABLE}")
+print(f"   C-series: C1={C1_AVAILABLE}, C2={C2_AVAILABLE}, C3={C3_AVAILABLE}, C4={C4_AVAILABLE}, C5={C5_AVAILABLE}, C6={C6_AVAILABLE}")
+print(f"   D-series: D1={D1_AVAILABLE}, D2={D2_AVAILABLE}, D3={D3_AVAILABLE}, D4={D4_AVAILABLE}")
+print(f"   V-series: V1={V1_AVAILABLE}, V2={V2_AVAILABLE}")
+
+available_models = []
+for model, available in [("A1", A1_AVAILABLE), ("A2", A2_AVAILABLE), ("A3", A3_AVAILABLE), ("A4", A4_AVAILABLE),
+                        ("B1", B1_AVAILABLE), ("B2", B2_AVAILABLE), ("B3", B3_AVAILABLE), ("B4", B4_AVAILABLE), ("B5", B5_AVAILABLE),
+                        ("C1", C1_AVAILABLE), ("C2", C2_AVAILABLE), ("C3", C3_AVAILABLE), ("C4", C4_AVAILABLE), ("C5", C5_AVAILABLE), ("C6", C6_AVAILABLE),
+                        ("D1", D1_AVAILABLE), ("D2", D2_AVAILABLE), ("D3", D3_AVAILABLE), ("D4", D4_AVAILABLE),
+                        ("V1", V1_AVAILABLE), ("V2", V2_AVAILABLE)]:
+    if available:
+        available_models.append(model)
+
+print(f"   📋 Total available models ({len(available_models)}): {available_models}")
 
 # Global variables for training
 TRAINING_DEVICE = torch.device('cpu')  # Default, will be set in main()
@@ -1335,6 +1360,41 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
     if model_id not in model_configs:
         logger.error(f"❌ Unknown model ID: {model_id}")
         logger.error(f"Available models: {list(model_configs.keys())}")
+        
+        # Enhanced debugging for missing models
+        logger.error(f"🔍 Debug info for missing model {model_id}:")
+        logger.error(f"   D3_AVAILABLE = {D3_AVAILABLE}")
+        logger.error(f"   D4_AVAILABLE = {D4_AVAILABLE}")
+        logger.error(f"   Model configs keys: {sorted(model_configs.keys())}")
+        
+        # Check if the model should be available
+        expected_models = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "B5", 
+                          "C1", "C2", "C3", "C4", "C5", "C6", "D1", "D2", "D3", "D4", "V1", "V2"]
+        missing_models = [m for m in expected_models if m not in model_configs]
+        if missing_models:
+            logger.error(f"   Missing from model_configs: {missing_models}")
+        
+        # Try to re-import the specific model for debugging
+        if model_id == "D3":
+            logger.info("   Attempting to re-import D3 model for debugging...")
+            try:
+                from models.implementations.d3_distributional_pde import create_model as debug_d3
+                logger.info("   ✅ D3 re-import successful!")
+                logger.info(f"   Function location: {debug_d3.__module__}")
+            except Exception as debug_e:
+                logger.error(f"   ❌ D3 re-import failed: {debug_e}")
+                logger.error("   Exception details:", exc_info=True)
+        
+        if model_id == "D4":
+            logger.info("   Attempting to re-import D4 model for debugging...")
+            try:
+                from models.implementations.d4_distributional_truncated import create_model as debug_d4
+                logger.info("   ✅ D4 re-import successful!")
+                logger.info(f"   Function location: {debug_d4.__module__}")
+            except Exception as debug_e:
+                logger.error(f"   ❌ D4 re-import failed: {debug_e}")
+                logger.error("   Exception details:", exc_info=True)
+        
         return False
     
     create_fn, description, available = model_configs[model_id]
