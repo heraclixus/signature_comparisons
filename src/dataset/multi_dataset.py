@@ -290,6 +290,24 @@ class MultiDatasetManager:
                 'generator': lambda **kwargs: self._generate_fbm_data(hurst=0.7, **kwargs),
                 'description': 'Persistent FBM (trending, H > 0.5)',
                 'params': {'num_samples': 32768, 'n_points': 64}
+            },
+            'moving_mnist_video': {
+                'name': 'Moving MNIST (Video)',
+                'generator': self._generate_moving_mnist_video_data,
+                'description': 'Moving MNIST raw video sequences for encoder/decoder architectures',
+                'params': {'num_samples': 1000, 'seq_len': 20, 'num_digits': 2, 'deterministic': True}
+            },
+            'moving_mnist_video_single': {
+                'name': 'Moving MNIST Video (Single Digit)',
+                'generator': lambda **kwargs: self._generate_moving_mnist_video_data(num_digits=1, **kwargs),
+                'description': 'Moving MNIST video with single digit for simpler encoder/decoder training',
+                'params': {'num_samples': 1000, 'seq_len': 25, 'num_digits': 1, 'deterministic': True}
+            },
+            'moving_mnist_video_long': {
+                'name': 'Moving MNIST Video (Long Sequence)',
+                'generator': lambda **kwargs: self._generate_moving_mnist_video_data(seq_len=50, **kwargs),
+                'description': 'Moving MNIST video with longer sequences for temporal modeling',
+                'params': {'num_samples': 500, 'seq_len': 50, 'num_digits': 2, 'deterministic': True}
             }
         }
     
@@ -314,6 +332,41 @@ class MultiDatasetManager:
         labels = torch.zeros(num_samples, dtype=torch.long)
         
         return torchdata.TensorDataset(fbm_data, labels)
+    
+    def _generate_moving_mnist_video_data(self, num_samples: int = 1000, seq_len: int = 20, 
+                                         num_digits: int = 2, deterministic: bool = True,
+                                         image_size: int = 64, **kwargs) -> torch.utils.data.TensorDataset:
+        """
+        Generate Moving MNIST dataset in raw video format.
+        
+        Args:
+            num_samples: Number of video sequences to generate
+            seq_len: Length of each video sequence
+            num_digits: Number of digits per sequence
+            deterministic: Whether movement is deterministic
+            image_size: Size of the canvas
+            
+        Returns:
+            TensorDataset with Moving MNIST video data
+        """
+        print(f"🎬 Generating Moving MNIST Video Dataset...")
+        print(f"   Format: Raw video sequences (seq_len, height, width, channels)")
+        print(f"   Samples: {num_samples}, Sequence length: {seq_len}")
+        print(f"   Digits: {num_digits}, Image size: {image_size}x{image_size}")
+        
+        # Import the video generator
+        try:
+            from dataset.moving_mnist_video import generate_moving_mnist_video_dataset
+            return generate_moving_mnist_video_dataset(
+                num_samples=num_samples,
+                seq_len=seq_len,
+                num_digits=num_digits,
+                image_size=image_size,
+                deterministic=deterministic,
+                data_root="./data"
+            )
+        except ImportError as e:
+            raise ImportError(f"Failed to import Moving MNIST video generator: {e}")
     
     def get_dataset(self, dataset_name: str, **kwargs) -> torch.utils.data.TensorDataset:
         """

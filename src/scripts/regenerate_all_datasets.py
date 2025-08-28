@@ -44,7 +44,8 @@ def main():
     persistence = create_dataset_persistence()
     
     # List of all datasets
-    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07']
+    datasets = ['ou_process', 'heston', 'rbergomi', 'brownian', 'fbm_h03', 'fbm_h04', 'fbm_h06', 'fbm_h07', 
+                'moving_mnist_video', 'moving_mnist_video_single', 'moving_mnist_video_long']
     
     successful = 0
     failed = 0
