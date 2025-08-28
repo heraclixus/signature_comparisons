@@ -51,7 +51,7 @@ class SignatureScoringLoss(nn.Module):
         signature_level: int = 4,
         lambda_param: float = 1.0,
         kernel_type: str = "rbf",
-        dyadic_order: int = 4,
+        dyadic_order: int = 3,
         sigma: float = 1.0,
         max_batch: int = 64
     ):
@@ -260,7 +260,7 @@ class AdaptedSigKerScoreDiscriminator(nn.Module):
     def __init__(
         self, 
         kernel_type: str = "rbf", 
-        dyadic_order: int = 4, 
+        dyadic_order: int = 3, 
         path_dim: int = 1,
         sigma: float = 1.0, 
         lambda_param: float = 1.0,

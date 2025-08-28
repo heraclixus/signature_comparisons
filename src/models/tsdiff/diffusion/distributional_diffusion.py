@@ -50,7 +50,7 @@ class DistributionalDiffusion(nn.Module):
         lambda_param: float = 1.0,   # λ: generalized kernel score parameter
         signature_level: int = 4,    # s: signature truncation level
         kernel_type: str = "rbf",    # Signature kernel type
-        dyadic_order: int = 4,       # Dyadic partitioning order
+        dyadic_order: int = 3,       # Dyadic partitioning order
         sigma: float = 1.0,          # RBF kernel bandwidth
         max_batch: int = 64,         # Maximum batch size for kernel computation
         **kwargs

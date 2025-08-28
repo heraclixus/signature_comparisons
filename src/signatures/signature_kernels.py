@@ -26,7 +26,7 @@ class SignatureKernel:
     that can work with different backends (sigkernel, custom implementations).
     """
     
-    def __init__(self, kernel_type: str = "rbf", dyadic_order: int = 4, 
+    def __init__(self, kernel_type: str = "rbf", dyadic_order: int = 3, 
                  sigma: float = 1.0):
         """
         Initialize signature kernel.
@@ -148,7 +148,7 @@ class SummedSignatureKernel:
         return total / self.n_kernels
 
 
-def get_signature_kernel(kernel_type: str = "rbf", dyadic_order: int = 4, 
+def get_signature_kernel(kernel_type: str = "rbf", dyadic_order: int = 3, 
                         sigma: float = 1.0) -> SignatureKernel:
     """
     Factory function for creating signature kernels.
@@ -164,7 +164,7 @@ def get_signature_kernel(kernel_type: str = "rbf", dyadic_order: int = 4,
     return SignatureKernel(kernel_type, dyadic_order, sigma)
 
 
-def get_multi_scale_kernel(kernel_type: str = "rbf", dyadic_order: int = 4,
+def get_multi_scale_kernel(kernel_type: str = "rbf", dyadic_order: int = 3,
                           sigmas: List[float] = [0.5, 1.0, 2.0]) -> SummedSignatureKernel:
     """
     Create multi-scale signature kernel with different bandwidths.

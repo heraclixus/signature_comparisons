@@ -10,7 +10,7 @@ model:
   lambda_param: 1.0         # λ: generalized kernel score parameter
   signature_level: 4        # s: signature truncation level
   kernel_type: "rbf"        # Signature kernel type ("rbf" or "linear")
-  dyadic_order: 4           # Dyadic partitioning order for PDE solver
+  dyadic_order: 3           # Dyadic partitioning order for PDE solver
   sigma: 1.0                # RBF kernel bandwidth parameter
   max_batch: 64             # Maximum batch size for kernel computation
 

@@ -337,7 +337,7 @@ def create_d2_config(
         # Signature configuration
         signature_config={
             'kernel_type': kwargs.get('kernel_type', 'rbf'),
-            'dyadic_order': kwargs.get('dyadic_order', 4),
+            'dyadic_order': kwargs.get('dyadic_order', 3),
             'sigma': kwargs.get('sigma', 1.0),
             'max_batch': kwargs.get('max_batch', 64)
         },

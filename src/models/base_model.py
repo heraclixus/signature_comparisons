@@ -158,12 +158,12 @@ class ModelConfig:
                 'depth': 4
             },
             SignatureMethod.PDE_SOLVED: {
-                'dyadic_order': 4,
+                'dyadic_order': 3,
                 'kernel_type': 'rbf',
                 'sigma': 1.0
             },
             SignatureMethod.KERNEL_METHODS: {
-                'dyadic_order': 4,
+                'dyadic_order': 3,
                 'kernel_type': 'rbf',
                 'sigma': 1.0
             }

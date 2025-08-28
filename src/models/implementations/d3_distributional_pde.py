@@ -66,7 +66,7 @@ class D3DistributionalDiffusion(D2DistributionalDiffusion):
     
     def _init_pde_scoring_loss(self, config: ModelConfig):
         """Initialize PDE-solved signature scoring loss."""
-        dyadic_order = config.signature_config.get('dyadic_order', 4)
+        dyadic_order = config.signature_config.get('dyadic_order', 3)
         kernel_type = config.signature_config.get('kernel_type', 'rbf')
         sigma = config.signature_config.get('sigma', 1.0)
         max_batch = config.signature_config.get('max_batch', 16)
@@ -126,7 +126,7 @@ def create_d3_model(
     learning_rate: float = 5e-4,
     device: str = 'cpu',
     # PDE-specific parameters
-    dyadic_order: int = 4,
+    dyadic_order: int = 3,
     kernel_type: str = 'rbf',
     sigma: float = 1.0,
     **kwargs
@@ -287,7 +287,7 @@ def get_default_config() -> Dict[str, Any]:
         'batch_size': 32,
         'device': 'cpu',
         # PDE-specific
-        'dyadic_order': 4,
+        'dyadic_order': 3,
         'kernel_type': 'rbf',
         'sigma': 1.0
     }

@@ -28,7 +28,7 @@ K_XY = self.sig_kernel.compute_Gram(gen_paths, real_path, sym=False) # O(m)
 
 **Current Parameters**:
 - `population_size`: 4 (production), 2 (test mode)
-- `dyadic_order`: 3 (D2), 4 (D3) 
+- `dyadic_order`: 3 (D2), 3 (D3) 
 - `max_batch`: 32 (D2), 16 (D3)
 
 ### 2. **Population-Based Training** (Secondary Bottleneck)
@@ -104,7 +104,7 @@ real_path = real_batch.transpose(1, 2).double().to(device)
 'dyadic_order': 2  # ~2x speedup
 
 # D3 Current
-'dyadic_order': 4
+'dyadic_order': 3
 
 # D3 Optimized
 'dyadic_order': 3  # ~2x speedup

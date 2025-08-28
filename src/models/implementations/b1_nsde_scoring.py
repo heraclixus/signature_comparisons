@@ -215,11 +215,11 @@ class B1Model(BaseSignatureModel):
             loss_config={
                 'kernel_type': 'rbf',
                 'sigma': 1.0,
-                'dyadic_order': 4  # Further reduced for memory efficiency
+                'dyadic_order': 3  # Further reduced for memory efficiency
             },
             signature_config={
                 'depth': 4,
-                'dyadic_order': 4,  # Further reduced for memory efficiency
+                'dyadic_order': 3,  # Further reduced for memory efficiency
                 'normalize': True
             }
         )
@@ -265,7 +265,7 @@ class B1Model(BaseSignatureModel):
         
         # Create PDE-solved signature transform using local sigkernel
         self.signature_transform = PDESolvedSignature(
-            dyadic_order=self.config.signature_config.get('dyadic_order', 4),  # Further reduced for memory
+            dyadic_order=self.config.signature_config.get('dyadic_order', 3),  # Further reduced for memory
             static_kernel_type="RBF",
             sigma=self.config.loss_config.get('sigma', 1.0),
             depth=self.config.signature_config.get('depth', 4)
@@ -273,7 +273,7 @@ class B1Model(BaseSignatureModel):
         
         # Create signature kernel scoring loss using local sigkernel
         self.scoring_loss = SigKernelScoringLoss(
-            dyadic_order=self.config.signature_config.get('dyadic_order', 4),  # Further reduced for memory
+            dyadic_order=self.config.signature_config.get('dyadic_order', 3),  # Further reduced for memory
             static_kernel_type="RBF",
             sigma=self.config.loss_config.get('sigma', 1.0),
             max_batch=4  # Very small batch size for memory efficiency
