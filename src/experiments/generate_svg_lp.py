@@ -9,16 +9,15 @@ import random
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import svg_utils as utils
-import itertools
-import progressbar
 import numpy as np
+from tqdm import tqdm
 from scipy.ndimage.filters import gaussian_filter
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', default=100, type=int, help='batch size')
 parser.add_argument('--data_root', default='data', help='root directory for data')
-parser.add_argument('--model_path', default='', help='path to model')
-parser.add_argument('--log_dir', default='', help='directory to save generations to')
+parser.add_argument('--model_path', default='data/svglp_smmnist2.pth', help='path to model')
+parser.add_argument('--log_dir', default='results/svglp_generate', help='directory to save generations to')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--n_past', type=int, default=2, help='number of frames to condition on')
 parser.add_argument('--n_future', type=int, default=28, help='number of frames to predict')
@@ -41,9 +40,9 @@ torch.cuda.manual_seed_all(opt.seed)
 dtype = torch.cuda.FloatTensor
 
 
-
+print(f"Loading model from {opt.model_path}")
 # ---------------- load the models  ----------------
-tmp = torch.load(opt.model_path)
+tmp = torch.load(opt.model_path, map_location=torch.device('cpu'))
 frame_predictor = tmp['frame_predictor']
 posterior = tmp['posterior']
 prior = tmp['prior']
@@ -138,19 +137,8 @@ def make_gifs(x, idx, name):
     nsample = opt.nsample
     ssim = np.zeros((opt.batch_size, nsample, opt.n_future))
     psnr = np.zeros((opt.batch_size, nsample, opt.n_future))
-    try:
-        progress = progressbar.ProgressBar(maxval=nsample).start()
-        use_progressbar = True
-    except TypeError:
-        print(f"Generating {nsample} samples...")
-        progress = None
-        use_progressbar = False
     all_gen = []
-    for s in range(nsample):
-        if use_progressbar and progress:
-            progress.update(s+1)
-        elif s % 10 == 0:
-            print(f"  Generated {s+1}/{nsample} samples")
+    for s in tqdm(range(nsample), desc="Generating samples"):
         gen_seq = []
         gt_seq = []
         frame_predictor.hidden = frame_predictor.init_hidden()
@@ -181,12 +169,6 @@ def make_gifs(x, idx, name):
                 gt_seq.append(x[i].data.cpu().numpy())
                 all_gen[s].append(x_in)
         _, ssim[:, s, :], psnr[:, s, :] = utils.eval_seq(gt_seq, gen_seq)
-
-    if use_progressbar and progress:
-        progress.finish()
-        utils.clear_progressbar()
-    else:
-        print(f"Completed generation")
 
     ###### ssim ######
     for i in range(opt.batch_size):

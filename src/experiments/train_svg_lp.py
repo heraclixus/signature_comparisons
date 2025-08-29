@@ -1,3 +1,5 @@
+# baseline svg_lp from https://github.com/edenton/svg
+
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -8,13 +10,13 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import svg_utils as utils
 import itertools
-import progressbar
 import numpy as np
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
 parser.add_argument('--beta1', default=0.9, type=float, help='momentum term for adam')
-parser.add_argument('--batch_size', default=100, type=int, help='batch size')
+parser.add_argument('--batch_size', default=500, type=int, help='batch size')
 parser.add_argument('--log_dir', default='results/lp', help='base directory to save logs')
 parser.add_argument('--model_dir', default='', help='base directory to save logs')
 parser.add_argument('--name', default='', help='identifier for directory')
@@ -340,7 +342,7 @@ def train(x):
     return mse.data.cpu().numpy()/(opt.n_past+opt.n_future), kld.data.cpu().numpy()/(opt.n_future+opt.n_past)
 
 # --------- training loop ------------------------------------
-for epoch in range(opt.niter):
+for epoch in tqdm(range(opt.niter), desc="Training Epochs"):
     frame_predictor.train()
     posterior.train()
     prior.train()
@@ -348,34 +350,23 @@ for epoch in range(opt.niter):
     decoder.train()
     epoch_mse = 0
     epoch_kld = 0
-    try:
-        # Try new progressbar API
-        progress = progressbar.ProgressBar(maxval=opt.epoch_size).start()
-        use_progressbar = True
-    except TypeError:
-        # Fallback to simple progress tracking
-        print(f"Training epoch {epoch+1}/{opt.niter}...")
-        progress = None
-        use_progressbar = False
     
-    for i in range(opt.epoch_size):
-        if use_progressbar and progress:
-            progress.update(i+1)
-        elif i % 10 == 0:  # Print every 10 batches
-            print(f"  Batch {i+1}/{opt.epoch_size}")
+    # Training batches with tqdm progress bar
+    batch_iterator = tqdm(range(opt.epoch_size), desc=f"Epoch {epoch+1}/{opt.niter}", leave=False)
+    
+    for i in batch_iterator:
         x = next(training_batch_generator)
 
         # train frame_predictor 
         mse, kld = train(x)
         epoch_mse += mse
         epoch_kld += kld
-
-
-    if use_progressbar and progress:
-        progress.finish()
-        utils.clear_progressbar()
-    else:
-        print(f"  Completed epoch {epoch+1}")
+        
+        # Update progress bar with current losses
+        batch_iterator.set_postfix({
+            'MSE': f'{mse:.5f}',
+            'KLD': f'{kld:.5f}'
+        })
 
     print('[%02d] mse loss: %.5f | kld loss: %.5f (%d)' % (epoch, epoch_mse/opt.epoch_size, epoch_kld/opt.epoch_size, epoch*opt.epoch_size*opt.batch_size))
 

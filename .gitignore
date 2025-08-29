@@ -14,6 +14,7 @@ MODEL.md
 # Training results and models
 results/*/trained_models/
 results/*/logs/
+results/svg*
 # Generated evaluation CSV files
 results/*/evaluation/*.csv
 results/*/training/*.csv

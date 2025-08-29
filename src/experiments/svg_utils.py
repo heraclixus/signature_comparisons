@@ -264,12 +264,8 @@ def batch_flatten(x):
     return x.resize(x.size(0), prod(x.size()[1:]))
 
 def clear_progressbar():
-    # moves up 3 lines
-    print("\033[2A")
-    # deletes the whole line, regardless of character position
-    print("\033[2K")
-    # moves up two lines again
-    print("\033[2A")
+    # Legacy function - no longer needed with tqdm
+    pass
 
 def mse_metric(x1, x2):
     err = np.sum((x1 - x2) ** 2)
