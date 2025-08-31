@@ -80,15 +80,24 @@ class D2DistributionalDiffusion(BaseSignatureModel):
         self.ddm = DistributionalDiffusion(**ddm_kwargs)
         
         # Create generator network
+        generator_type = self.config.generator_config.get('generator_type', 'feedforward')
+        
         gen_kwargs = {
-            'generator_type': "feedforward",
+            'generator_type': generator_type,
             'data_size': self.dim,
             'seq_len': self.seq_len
         }
+        
         # Add generator config, excluding our custom parameters
         for key, value in self.config.generator_config.items():
-            if key not in ['gamma', 'num_coarse_steps']:
+            if key not in ['gamma', 'num_coarse_steps', 'generator_type']:
                 gen_kwargs[key] = value
+        
+        print(f"🏗️ Creating D2 generator: type={generator_type}")
+        if generator_type == 'transformer':
+            print(f"   🤖 Using transformer architecture for enhanced sequence modeling")
+        else:
+            print(f"   📊 Using feedforward architecture for efficiency")
         
         self.generator = create_distributional_generator(**gen_kwargs)
         
@@ -323,9 +332,14 @@ def create_d2_config(
         generator_config={
             'gamma': gamma,
             'num_coarse_steps': num_coarse_steps,
-            'hidden_size': kwargs.get('hidden_size', 128),
+            'generator_type': kwargs.get('generator_type', 'feedforward'),
+            'hidden_size': kwargs.get('hidden_size', 64),
             'num_layers': kwargs.get('num_layers', 3),
-            'activation': kwargs.get('activation', 'relu')
+            'activation': kwargs.get('activation', 'relu'),
+            # Transformer-specific parameters
+            'num_heads': kwargs.get('num_heads', 8),
+            'dropout': kwargs.get('dropout', 0.1),
+            'feedforward_dim': kwargs.get('feedforward_dim', None)
         },
         
         # Loss configuration
@@ -358,4 +372,39 @@ def create_d2_config(
 def create_d2_model(**kwargs) -> D2DistributionalDiffusion:
     """Create D2 model with default or custom configuration."""
     config = create_d2_config(**kwargs)
+    return D2DistributionalDiffusion(config)
+
+
+def create_d2_transformer_model(**kwargs) -> D2DistributionalDiffusion:
+    """
+    Create D2 model with transformer-based generator.
+    
+    This is a convenience function that sets up D2 with transformer
+    architecture for enhanced sequence modeling.
+    
+    Args:
+        **kwargs: Configuration parameters, automatically sets generator_type='transformer'
+        
+    Returns:
+        D2DistributionalDiffusion with transformer generator
+    """
+    # Set transformer as default generator type
+    transformer_defaults = {
+        'generator_type': 'transformer',
+        'hidden_size': 64,
+        'num_layers': 4,
+        'num_heads': 8,
+        'dropout': 0.1
+    }
+    
+    # Merge with user provided kwargs (user kwargs take precedence)
+    final_kwargs = {**transformer_defaults, **kwargs}
+    
+    print(f"🤖 Creating D2 model with transformer generator:")
+    print(f"   Hidden size: {final_kwargs['hidden_size']}")
+    print(f"   Transformer layers: {final_kwargs['num_layers']}")
+    print(f"   Attention heads: {final_kwargs['num_heads']}")
+    print(f"   Dropout: {final_kwargs['dropout']}")
+    
+    config = create_d2_config(**final_kwargs)
     return D2DistributionalDiffusion(config)

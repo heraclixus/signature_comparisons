@@ -385,15 +385,41 @@ def create_distributional_generator(
     Factory function for creating distributional generators.
     
     Args:
-        generator_type: "feedforward" or "sde_based"
+        generator_type: "feedforward", "transformer", or "sde_based"
         **kwargs: Arguments passed to generator constructor
         
     Returns:
         Distributional generator module
     """
     if generator_type == "feedforward":
-        return DistributionalGenerator(**kwargs)
+        # Filter kwargs for feedforward generator
+        feedforward_kwargs = {}
+        valid_feedforward_params = {
+            'data_size', 'seq_len', 'hidden_size', 'num_layers', 'activation',
+            'use_time_embedding', 'time_embed_dim', 'dropout', 'final_activation'
+        }
+        
+        for key, value in kwargs.items():
+            if key in valid_feedforward_params:
+                feedforward_kwargs[key] = value
+        
+        return DistributionalGenerator(**feedforward_kwargs)
+    elif generator_type == "transformer":
+        from models.generators.transformer_distributional_generator import TransformerDistributionalGenerator
+        
+        # Filter kwargs for transformer generator (it has different parameters than MLP)
+        transformer_kwargs = {}
+        valid_transformer_params = {
+            'data_size', 'seq_len', 'hidden_size', 'num_layers', 'num_heads', 
+            'dropout', 'time_embed_dim', 'feedforward_dim'
+        }
+        
+        for key, value in kwargs.items():
+            if key in valid_transformer_params:
+                transformer_kwargs[key] = value
+        
+        return TransformerDistributionalGenerator(**transformer_kwargs)
     elif generator_type == "sde_based":
         return AdaptedSigKerGenerator(**kwargs)
     else:
-        raise ValueError(f"Unknown generator type: {generator_type}")
+        raise ValueError(f"Unknown generator type: {generator_type}. Choose from: feedforward, transformer, sde_based")
