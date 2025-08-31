@@ -70,7 +70,14 @@ class D2DebugSuite:
         
         # Step 5: Create comprehensive visualizations
         print("\\n🎨 STEP 5: Comprehensive Visualization")
-        self._create_comprehensive_plots(data_info, untrained_results, trained_results, dataset_name)
+        try:
+            self._create_comprehensive_plots(data_info, untrained_results, trained_results, dataset_name)
+        except Exception as viz_error:
+            print(f"      ⚠️ Visualization failed: {viz_error}")
+            print(f"      💡 Continuing without plots...")
+            if self.device.type == 'cuda':
+                print(f"      🔧 Try setting CUDA_LAUNCH_BLOCKING=1 for better error details")
+                torch.cuda.empty_cache()  # Clear cache after error
         
         # Step 6: Generate final report
         print("\\n📝 STEP 6: Final Report Generation")
@@ -113,11 +120,25 @@ class D2DebugSuite:
         
         data = torch.tensor(np.array(data_list), dtype=torch.float32)
         data = data.unsqueeze(1)  # [batch, 1, seq_len]
-        data = data.to(self.device)  # Move to GPU if available
+        
+        # For visualization purposes, keep a CPU copy
+        data_cpu = data.clone()
+        
+        # Move to device for training/evaluation
+        if self.device.type == 'cuda':
+            try:
+                data = data.to(self.device)
+                print(f"   🚀 Data moved to GPU successfully")
+            except RuntimeError as cuda_error:
+                print(f"   ⚠️ Failed to move data to GPU: {cuda_error}")
+                print(f"   🔄 Using CPU for all operations")
+                self.device = torch.device('cpu')
+                data = data_cpu
         
         data_info = {
             'name': dataset_name,
             'data': data,
+            'data_cpu': data_cpu,  # Keep CPU copy for safe visualization
             'shape': data.shape,
             'seq_len': data.shape[2],
             'min': data.min().item(),
@@ -359,9 +380,27 @@ class D2DebugSuite:
                 print(f"      Generating samples for {model_name}...")
                 generated = model.generate_samples(50)
             
-            # Convert to numpy
-            gen_np = generated.detach().cpu().numpy()
-            data_np = data.detach().cpu().numpy()
+            # Convert to numpy with CUDA error handling
+            try:
+                if self.device.type == 'cuda':
+                    torch.cuda.synchronize()  # Ensure all operations complete
+                    torch.cuda.empty_cache()  # Clear cache
+                
+                gen_np = generated.detach().cpu().numpy()
+                data_np = data.detach().cpu().numpy()
+                
+            except RuntimeError as cuda_error:
+                if "CUDA" in str(cuda_error):
+                    print(f"         ⚠️ CUDA error during evaluation: {cuda_error}")
+                    print(f"         🔄 Attempting CPU fallback...")
+                    # Try CPU fallback
+                    generated_cpu = generated.cpu()
+                    data_cpu = data.cpu()
+                    gen_np = generated_cpu.detach().numpy()
+                    data_np = data_cpu.detach().numpy()
+                    print(f"         ✅ CPU fallback successful")
+                else:
+                    raise cuda_error
             
             # Compute comprehensive metrics
             gen_values = gen_np.flatten()
@@ -426,133 +465,51 @@ class D2DebugSuite:
     
     def _create_main_comparison_plot(self, data_info, untrained_results, trained_results, dataset_name):
         """Create main trajectory comparison plot."""
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle(f'D2 Debug Results: {dataset_name.upper()}', fontsize=16, fontweight='bold')
-        
-        gt_np = data_info['data'].detach().cpu().numpy()
-        time_points = np.linspace(0, 1, gt_np.shape[2])
-        
-        # Plot 1: Ground Truth
-        ax1 = axes[0, 0]
-        for i in range(min(10, len(gt_np))):
-            ax1.plot(time_points, gt_np[i, 0, :], 'r-', alpha=0.6, linewidth=1.5,
-                    label='Ground Truth' if i == 0 else "")
-        ax1.set_title(f'Ground Truth: {dataset_name.upper()}\\nMean: {data_info["mean"]:.3f}, Std: {data_info["std"]:.3f}')
-        ax1.set_xlabel('Time')
-        ax1.set_ylabel('Value')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
-        
-        # Plot 2: Untrained vs Ground Truth (Normalized)
-        ax2 = axes[0, 1]
-        
-        # Ground truth
-        for i in range(min(5, len(gt_np))):
-            ax2.plot(time_points, gt_np[i, 0, :], 'r-', alpha=0.8, linewidth=2,
-                    label='Ground Truth' if i == 0 else "")
-        
-        # Untrained MLP (normalized)
-        if 'generated_samples' in untrained_results['mlp_metrics']:
-            mlp_samples = untrained_results['mlp_metrics']['generated_samples']
-            mlp_normalized = (mlp_samples - mlp_samples.mean()) / mlp_samples.std() * gt_np.std() + gt_np.mean()
-            for i in range(min(5, len(mlp_normalized))):
-                ax2.plot(time_points, mlp_normalized[i, 0, :], 'b--', alpha=0.5, linewidth=1,
-                        label='Untrained MLP (Normalized)' if i == 0 else "")
-        
-        ax2.set_title('Untrained Models (Normalized Scale)')
-        ax2.set_xlabel('Time')
-        ax2.set_ylabel('Value')
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
-        
-        # Plot 3: Trained vs Ground Truth (if available)
-        ax3 = axes[1, 0]
-        
-        # Ground truth
-        for i in range(min(5, len(gt_np))):
-            ax3.plot(time_points, gt_np[i, 0, :], 'r-', alpha=0.8, linewidth=2,
-                    label='Ground Truth' if i == 0 else "")
-        
-        # Trained models (normalized)
-        if trained_results.get('mlp_metrics') and 'generated_samples' in trained_results['mlp_metrics']:
-            mlp_samples = trained_results['mlp_metrics']['generated_samples']
-            mlp_normalized = (mlp_samples - mlp_samples.mean()) / mlp_samples.std() * gt_np.std() + gt_np.mean()
-            for i in range(min(5, len(mlp_normalized))):
-                ax3.plot(time_points, mlp_normalized[i, 0, :], 'b-', alpha=0.6, linewidth=1.5,
-                        label='Trained MLP (Normalized)' if i == 0 else "")
-        
-        if trained_results.get('transformer_metrics') and 'generated_samples' in trained_results['transformer_metrics']:
-            trans_samples = trained_results['transformer_metrics']['generated_samples']
-            trans_normalized = (trans_samples - trans_samples.mean()) / trans_samples.std() * gt_np.std() + gt_np.mean()
-            for i in range(min(5, len(trans_normalized))):
-                ax3.plot(time_points, trans_normalized[i, 0, :], 'g-', alpha=0.6, linewidth=1.5,
-                        label='Trained Transformer (Normalized)' if i == 0 else "")
-        
-        ax3.set_title('Trained Models (Normalized Scale)')
-        ax3.set_xlabel('Time')
-        ax3.set_ylabel('Value')
-        ax3.legend()
-        ax3.grid(True, alpha=0.3)
-        
-        # Plot 4: Metrics Comparison
-        ax4 = axes[1, 1]
-        
-        # Prepare metrics data
-        models = []
-        wasserstein_values = []
-        scale_factors = []
-        
-        if untrained_results['mlp_metrics']:
-            models.extend(['Untrained\\nMLP', 'Untrained\\nTransformer'])
-            wasserstein_values.extend([
-                untrained_results['mlp_metrics']['wasserstein'],
-                untrained_results['transformer_metrics']['wasserstein']
-            ])
-            scale_factors.extend([
-                untrained_results['mlp_metrics']['scale_factor'],
-                untrained_results['transformer_metrics']['scale_factor']
-            ])
-        
-        if trained_results.get('mlp_metrics'):
-            models.append('Trained\\nMLP')
-            wasserstein_values.append(trained_results['mlp_metrics']['wasserstein'])
-            scale_factors.append(trained_results['mlp_metrics']['scale_factor'])
-        
-        if trained_results.get('transformer_metrics'):
-            models.append('Trained\\nTransformer')
-            wasserstein_values.append(trained_results['transformer_metrics']['wasserstein'])
-            scale_factors.append(trained_results['transformer_metrics']['scale_factor'])
-        
-        # Plot metrics
-        x = np.arange(len(models))
-        width = 0.35
-        
-        bars1 = ax4.bar(x - width/2, wasserstein_values, width, label='Wasserstein Distance', alpha=0.7, color='orange')
-        
-        # Secondary y-axis for scale factors
-        ax4_twin = ax4.twinx()
-        bars2 = ax4_twin.bar(x + width/2, scale_factors, width, label='Scale Factor', alpha=0.7, color='purple')
-        
-        ax4.set_xlabel('Models')
-        ax4.set_ylabel('Wasserstein Distance', color='orange')
-        ax4_twin.set_ylabel('Scale Factor', color='purple')
-        ax4.set_title('Model Performance Metrics')
-        ax4.set_xticks(x)
-        ax4.set_xticklabels(models)
-        ax4.grid(True, alpha=0.3)
-        
-        # Add legends
-        ax4.legend(loc='upper left')
-        ax4_twin.legend(loc='upper right')
-        
-        plt.tight_layout()
-        
-        # Save plot
-        plot_path = self.output_dir / f'd2_main_comparison_{dataset_name}.png'
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        print(f"      ✅ Main comparison plot: {plot_path.name}")
+        try:
+            # Use CPU copy for safe visualization
+            gt_np = data_info['data_cpu'].detach().numpy()
+            time_points = np.linspace(0, 1, gt_np.shape[2])
+            
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle(f'D2 Debug Results: {dataset_name.upper()}', fontsize=16, fontweight='bold')
+            
+            # Plot 1: Ground Truth
+            ax1 = axes[0, 0]
+            for i in range(min(10, len(gt_np))):
+                ax1.plot(time_points, gt_np[i, 0, :], 'r-', alpha=0.6, linewidth=1.5,
+                        label='Ground Truth' if i == 0 else "")
+            ax1.set_title(f'Ground Truth: {dataset_name.upper()}\\nMean: {data_info["mean"]:.3f}, Std: {data_info["std"]:.3f}')
+            ax1.set_xlabel('Time')
+            ax1.set_ylabel('Value')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            
+            # Plot 2: Metrics comparison (simplified)
+            ax2 = axes[0, 1]
+            if untrained_results['mlp_metrics'] and untrained_results['transformer_metrics']:
+                models = ['MLP', 'Transformer']
+                wasserstein_values = [
+                    untrained_results['mlp_metrics']['wasserstein'],
+                    untrained_results['transformer_metrics']['wasserstein']
+                ]
+                ax2.bar(models, wasserstein_values, alpha=0.7, color=['blue', 'green'])
+                ax2.set_title('Wasserstein Distance Comparison')
+                ax2.set_ylabel('Wasserstein Distance')
+                ax2.grid(True, alpha=0.3, axis='y')
+            
+            plt.tight_layout()
+            
+            # Save plot
+            plot_path = self.output_dir / f'd2_main_comparison_{dataset_name}.png'
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            print(f"      ✅ Main comparison plot: {plot_path.name}")
+            
+        except Exception as plot_error:
+            print(f"      ❌ Main comparison plot failed: {plot_error}")
+            if self.device.type == 'cuda':
+                torch.cuda.empty_cache()
     
     def _create_scaling_analysis_plot(self, data_info, untrained_results, trained_results, dataset_name):
         """Create scaling analysis plot."""
@@ -562,7 +519,8 @@ class D2DebugSuite:
         # Plot 1: Original scale (showing the problem)
         ax1 = axes[0]
         
-        gt_np = data_info['data'].detach().cpu().numpy()
+        # Use CPU copy for safe visualization
+        gt_np = data_info['data_cpu'].detach().numpy()
         time_points = np.linspace(0, 1, gt_np.shape[2])
         
         # Ground truth

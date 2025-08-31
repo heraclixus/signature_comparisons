@@ -46,9 +46,17 @@ def main():
         print(f"🔥 CUDA Cores: {torch.cuda.get_device_properties(0).multi_processor_count}")
         print("✅ CUDA acceleration enabled!")
         
+        # Set environment variable for better CUDA error debugging
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+        print("🔍 CUDA_LAUNCH_BLOCKING=1 set for better error reporting")
+        
         # Set CUDA optimizations
         torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
         torch.backends.cudnn.deterministic = False  # Allow non-deterministic for speed
+        
+        # Clear any existing CUDA cache
+        torch.cuda.empty_cache()
+        print("🧹 Initial GPU cache cleared")
         
     else:
         print("⚠️  CPU mode - training will be slower")

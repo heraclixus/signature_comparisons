@@ -179,14 +179,27 @@ class TransformerDistributionalGenerator(nn.Module):
         # Add norm_first only if supported (PyTorch >= 1.9.0)
         try:
             import torch
-            pytorch_version = tuple(map(int, torch.__version__.split('.')[:2]))
-            if pytorch_version >= (1, 9):
-                encoder_kwargs['norm_first'] = True  # Pre-norm for better training
+            # Parse version more carefully to handle versions like "1.8.1+cu111"
+            version_str = torch.__version__.split('+')[0]  # Remove build info
+            version_parts = version_str.split('.')
+            major = int(version_parts[0])
+            minor = int(version_parts[1])
+            
+            if (major > 1) or (major == 1 and minor >= 9):
+                # Test if norm_first is actually supported by trying to create a layer
+                try:
+                    test_layer = torch.nn.TransformerEncoderLayer(
+                        d_model=32, nhead=4, norm_first=True, batch_first=True
+                    )
+                    encoder_kwargs['norm_first'] = True  # Pre-norm for better training
+                    print(f"      ✅ PyTorch {torch.__version__} - using pre-norm (norm_first=True)")
+                except TypeError:
+                    print(f"      ℹ️ PyTorch {torch.__version__} - norm_first not supported, using post-norm")
             else:
-                print(f"      ℹ️ PyTorch {torch.__version__} detected - using post-norm (norm_first not available)")
-        except:
+                print(f"      ℹ️ PyTorch {torch.__version__} - using post-norm (norm_first not available)")
+        except Exception as e:
             # Fallback: don't use norm_first
-            pass
+            print(f"      ⚠️ Version detection failed ({e}) - using post-norm as fallback")
         
         encoder_layer = nn.TransformerEncoderLayer(**encoder_kwargs)
         
