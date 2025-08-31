@@ -27,6 +27,8 @@ def main():
                        help='Number of training epochs')
     parser.add_argument('--output-dir', default='debug_d2_results',
                        help='Output directory for results')
+    parser.add_argument('--cpu-only', action='store_true',
+                       help='Force CPU-only mode (avoid CUDA issues)')
     
     args = parser.parse_args()
     
@@ -37,30 +39,41 @@ def main():
     print(f"Output: {args.output_dir}")
     print()
     
-    # Show system info
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"🖥️  Device: {device}")
-    if device.type == 'cuda':
-        print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
-        print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-        print(f"🔥 CUDA Cores: {torch.cuda.get_device_properties(0).multi_processor_count}")
-        print("✅ CUDA acceleration enabled!")
-        
-        # Set environment variable for better CUDA error debugging
-        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-        print("🔍 CUDA_LAUNCH_BLOCKING=1 set for better error reporting")
-        
-        # Set CUDA optimizations
-        torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
-        torch.backends.cudnn.deterministic = False  # Allow non-deterministic for speed
-        
-        # Clear any existing CUDA cache
-        torch.cuda.empty_cache()
-        print("🧹 Initial GPU cache cleared")
-        
+    # Show system info and handle CPU-only mode
+    if args.cpu_only:
+        print("🖥️  Device: cpu (forced)")
+        print("⚠️  CPU-only mode enabled - avoiding CUDA entirely")
+        # Disable CUDA to prevent any GPU operations
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
     else:
-        print("⚠️  CPU mode - training will be slower")
-        print("💡 Consider using a GPU server for faster results")
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"🖥️  Device: {device}")
+        if device.type == 'cuda':
+            print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
+            print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+            print(f"🔥 CUDA Cores: {torch.cuda.get_device_properties(0).multi_processor_count}")
+            print("✅ CUDA acceleration enabled!")
+            
+            # Set environment variable for better CUDA error debugging
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+            print("🔍 CUDA_LAUNCH_BLOCKING=1 set for better error reporting")
+            
+            # Set CUDA optimizations
+            torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
+            torch.backends.cudnn.deterministic = False  # Allow non-deterministic for speed
+            
+            # Test CUDA functionality before proceeding
+            try:
+                torch.cuda.empty_cache()
+                print("🧹 Initial GPU cache cleared")
+            except RuntimeError as cuda_error:
+                print(f"⚠️ CUDA test failed: {cuda_error}")
+                print("🔄 Automatically switching to CPU-only mode")
+                os.environ['CUDA_VISIBLE_DEVICES'] = ''
+            
+        else:
+            print("⚠️  CPU mode - training will be slower")
+            print("💡 Consider using a GPU server for faster results")
     print()
     
     # Run debug suite

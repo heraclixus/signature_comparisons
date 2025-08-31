@@ -36,15 +36,32 @@ class D2DebugSuite:
             shutil.rmtree(self.output_dir)
         self.output_dir.mkdir(exist_ok=True)
         
-        # Setup device (CUDA if available)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # Setup device with robust CUDA error handling
+        self.device = torch.device('cpu')  # Start with CPU as safe default
+        self.cuda_available = False
+        
+        if torch.cuda.is_available():
+            try:
+                # Test CUDA functionality before committing to GPU
+                test_tensor = torch.randn(10, 10, device='cuda')
+                _ = test_tensor.cpu()  # Test GPU->CPU transfer
+                torch.cuda.empty_cache()  # Test cache clearing
+                
+                self.device = torch.device('cuda')
+                self.cuda_available = True
+                print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
+                print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+                print("✅ CUDA functionality verified")
+                
+            except RuntimeError as cuda_error:
+                print(f"⚠️ CUDA test failed: {cuda_error}")
+                print("🔄 Falling back to CPU-only mode for safety")
+                self.device = torch.device('cpu')
+                self.cuda_available = False
         
         print(f"🔧 D2 Debug Suite initialized")
         print(f"📁 Output directory: {self.output_dir.absolute()}")
         print(f"🖥️  Device: {self.device}")
-        if self.device.type == 'cuda':
-            print(f"🚀 GPU: {torch.cuda.get_device_name(0)}")
-            print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
     def run_full_debug(self, dataset_name: str = 'ou_process', num_epochs: int = 100):
         """Run complete D2 debugging suite."""
@@ -75,18 +92,26 @@ class D2DebugSuite:
         except Exception as viz_error:
             print(f"      ⚠️ Visualization failed: {viz_error}")
             print(f"      💡 Continuing without plots...")
-            if self.device.type == 'cuda':
-                print(f"      🔧 Try setting CUDA_LAUNCH_BLOCKING=1 for better error details")
-                torch.cuda.empty_cache()  # Clear cache after error
+            if self.cuda_available:
+                print(f"      🔧 CUDA_LAUNCH_BLOCKING=1 set for better error details")
+                try:
+                    torch.cuda.empty_cache()  # Clear cache after error
+                except RuntimeError:
+                    print(f"      ⚠️ GPU cache clearing failed, disabling CUDA")
+                    self.cuda_available = False
+                    self.device = torch.device('cpu')
         
         # Step 6: Generate final report
         print("\\n📝 STEP 6: Final Report Generation")
         self._generate_final_report(dataset_name, data_info, untrained_results, trained_results)
         
         # Final GPU cleanup
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
-            self._print_gpu_memory_status("Final cleanup")
+        if self.cuda_available:
+            try:
+                torch.cuda.empty_cache()
+                self._print_gpu_memory_status("Final cleanup")
+            except RuntimeError as cuda_error:
+                print(f"      ⚠️ Final GPU cleanup failed: {cuda_error}")
         
         print(f"\\n✅ D2 DEBUG COMPLETE!")
         print(f"📁 All results saved in: {self.output_dir}/")
@@ -99,10 +124,13 @@ class D2DebugSuite:
     
     def _print_gpu_memory_status(self, stage: str = ""):
         """Print GPU memory status for monitoring."""
-        if self.device.type == 'cuda':
-            allocated = torch.cuda.memory_allocated(0) / 1e9
-            reserved = torch.cuda.memory_reserved(0) / 1e9
-            print(f"      💾 GPU Memory {stage}: {allocated:.1f}GB allocated, {reserved:.1f}GB reserved")
+        if self.cuda_available:
+            try:
+                allocated = torch.cuda.memory_allocated(0) / 1e9
+                reserved = torch.cuda.memory_reserved(0) / 1e9
+                print(f"      💾 GPU Memory {stage}: {allocated:.1f}GB allocated, {reserved:.1f}GB reserved")
+            except RuntimeError:
+                print(f"      ⚠️ GPU memory status unavailable")
     
     def _analyze_dataset(self, dataset_name: str):
         """Analyze the 1D dataset."""
@@ -125,7 +153,7 @@ class D2DebugSuite:
         data_cpu = data.clone()
         
         # Move to device for training/evaluation
-        if self.device.type == 'cuda':
+        if self.cuda_available:
             try:
                 data = data.to(self.device)
                 print(f"   🚀 Data moved to GPU successfully")
@@ -133,6 +161,7 @@ class D2DebugSuite:
                 print(f"   ⚠️ Failed to move data to GPU: {cuda_error}")
                 print(f"   🔄 Using CPU for all operations")
                 self.device = torch.device('cpu')
+                self.cuda_available = False
                 data = data_cpu
         
         data_info = {
@@ -305,13 +334,19 @@ class D2DebugSuite:
     def _custom_fit_with_progress(self, model, data, num_epochs, pbar, model_name):
         """Custom training loop with progress bar updates."""
         # Optimize batch size based on device and memory
-        if self.device.type == 'cuda':
+        if self.cuda_available:
             # Use larger batch size on GPU
             batch_size = 64
             learning_rate = 1e-4
             # Clear GPU cache before training
-            torch.cuda.empty_cache()
-            print(f"      🚀 Using GPU-optimized settings: batch_size={batch_size}")
+            try:
+                torch.cuda.empty_cache()
+                print(f"      🚀 Using GPU-optimized settings: batch_size={batch_size}")
+            except RuntimeError:
+                print(f"      ⚠️ GPU cache clearing failed, switching to CPU")
+                self.cuda_available = False
+                self.device = torch.device('cpu')
+                batch_size = 32
         else:
             batch_size = 32
             learning_rate = 1e-4
@@ -371,8 +406,13 @@ class D2DebugSuite:
         model.eval()
         
         # Clear GPU cache before evaluation
-        if self.device.type == 'cuda':
-            torch.cuda.empty_cache()
+        if self.cuda_available:
+            try:
+                torch.cuda.empty_cache()
+            except RuntimeError:
+                print(f"         ⚠️ GPU cache clearing failed, disabling CUDA")
+                self.cuda_available = False
+                self.device = torch.device('cpu')
         
         try:
             with torch.no_grad():
@@ -382,9 +422,14 @@ class D2DebugSuite:
             
             # Convert to numpy with CUDA error handling
             try:
-                if self.device.type == 'cuda':
-                    torch.cuda.synchronize()  # Ensure all operations complete
-                    torch.cuda.empty_cache()  # Clear cache
+                if self.cuda_available:
+                    try:
+                        torch.cuda.synchronize()  # Ensure all operations complete
+                        torch.cuda.empty_cache()  # Clear cache
+                    except RuntimeError:
+                        print(f"         ⚠️ CUDA operations failed, switching to CPU")
+                        self.cuda_available = False
+                        self.device = torch.device('cpu')
                 
                 gen_np = generated.detach().cpu().numpy()
                 data_np = data.detach().cpu().numpy()
@@ -392,7 +437,9 @@ class D2DebugSuite:
             except RuntimeError as cuda_error:
                 if "CUDA" in str(cuda_error):
                     print(f"         ⚠️ CUDA error during evaluation: {cuda_error}")
-                    print(f"         🔄 Attempting CPU fallback...")
+                    print(f"         🔄 Switching to CPU-only mode...")
+                    self.cuda_available = False
+                    self.device = torch.device('cpu')
                     # Try CPU fallback
                     generated_cpu = generated.cpu()
                     data_cpu = data.cpu()
@@ -508,8 +555,11 @@ class D2DebugSuite:
             
         except Exception as plot_error:
             print(f"      ❌ Main comparison plot failed: {plot_error}")
-            if self.device.type == 'cuda':
-                torch.cuda.empty_cache()
+            if self.cuda_available:
+                try:
+                    torch.cuda.empty_cache()
+                except RuntimeError:
+                    pass  # Ignore cache clearing errors in exception handler
     
     def _create_scaling_analysis_plot(self, data_info, untrained_results, trained_results, dataset_name):
         """Create scaling analysis plot."""
