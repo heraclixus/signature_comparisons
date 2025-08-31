@@ -166,16 +166,29 @@ class TransformerDistributionalGenerator(nn.Module):
         # Positional encoding for sequence position
         self.positional_encoding = PositionalEncoding(hidden_size * 2, max_len=seq_len)
         
-        # Transformer encoder
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_size * 2,  # Combined input + noise projections
-            nhead=num_heads,
-            dim_feedforward=feedforward_dim,
-            dropout=dropout,
-            activation='relu',
-            batch_first=True,
-            norm_first=True  # Pre-norm for better training
-        )
+        # Transformer encoder (with PyTorch version compatibility)
+        encoder_kwargs = {
+            'd_model': hidden_size * 2,  # Combined input + noise projections
+            'nhead': num_heads,
+            'dim_feedforward': feedforward_dim,
+            'dropout': dropout,
+            'activation': 'relu',
+            'batch_first': True
+        }
+        
+        # Add norm_first only if supported (PyTorch >= 1.9.0)
+        try:
+            import torch
+            pytorch_version = tuple(map(int, torch.__version__.split('.')[:2]))
+            if pytorch_version >= (1, 9):
+                encoder_kwargs['norm_first'] = True  # Pre-norm for better training
+            else:
+                print(f"      ℹ️ PyTorch {torch.__version__} detected - using post-norm (norm_first not available)")
+        except:
+            # Fallback: don't use norm_first
+            pass
+        
+        encoder_layer = nn.TransformerEncoderLayer(**encoder_kwargs)
         
         self.transformer = nn.TransformerEncoder(
             encoder_layer,

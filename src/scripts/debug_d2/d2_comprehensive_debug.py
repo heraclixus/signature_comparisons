@@ -137,39 +137,60 @@ class D2DebugSuite:
         """Test untrained D2 models."""
         print("   Creating untrained models...")
         
-        # Create models
-        d2_mlp = create_d2_model(
-            dim=1, 
-            seq_len=data_info['seq_len'], 
-            generator_type='feedforward',
-            hidden_size=64, 
-            num_layers=3, 
-            population_size=8,
-            device=str(self.device),  # Pass device to model
-            test_mode=False
-        )
+        # Create models with error handling
+        try:
+            d2_mlp = create_d2_model(
+                dim=1, 
+                seq_len=data_info['seq_len'], 
+                generator_type='feedforward',
+                hidden_size=64, 
+                num_layers=3, 
+                population_size=8,
+                device=str(self.device),  # Pass device to model
+                test_mode=False
+            )
+            print(f"   ✅ D2-MLP created successfully")
+        except Exception as e:
+            print(f"   ❌ D2-MLP creation failed: {e}")
+            raise
         
-        d2_transformer = create_d2_transformer_model(
-            dim=1,
-            seq_len=data_info['seq_len'],
-            hidden_size=64,
-            num_layers=3,
-            num_heads=8,
-            population_size=8,
-            device=str(self.device)  # Pass device to model
-        )
+        try:
+            d2_transformer = create_d2_transformer_model(
+                dim=1,
+                seq_len=data_info['seq_len'],
+                hidden_size=64,
+                num_layers=3,
+                num_heads=8,
+                population_size=8,
+                device=str(self.device)  # Pass device to model
+            )
+            print(f"   ✅ D2-Transformer created successfully")
+        except Exception as e:
+            print(f"   ❌ D2-Transformer creation failed: {e}")
+            print(f"   💡 This might be due to PyTorch version compatibility")
+            print(f"   💡 Try using D2-MLP only or updating PyTorch to >= 1.9.0")
+            # Continue with just MLP if transformer fails
+            d2_transformer = None
         
         # Move models to device
         d2_mlp = d2_mlp.to(self.device)
-        d2_transformer = d2_transformer.to(self.device)
+        if d2_transformer is not None:
+            d2_transformer = d2_transformer.to(self.device)
         
         print(f"   🔵 D2-MLP: {sum(p.numel() for p in d2_mlp.parameters()):,} parameters")
-        print(f"   🟢 D2-Transformer: {sum(p.numel() for p in d2_transformer.parameters()):,} parameters")
+        if d2_transformer is not None:
+            print(f"   🟢 D2-Transformer: {sum(p.numel() for p in d2_transformer.parameters()):,} parameters")
+        else:
+            print(f"   🟢 D2-Transformer: Not available (creation failed)")
         
         # Test generation
         print("   Testing untrained generation...")
         mlp_metrics = self._evaluate_model(d2_mlp, data_info['data'], "Untrained MLP")
-        transformer_metrics = self._evaluate_model(d2_transformer, data_info['data'], "Untrained Transformer")
+        
+        if d2_transformer is not None:
+            transformer_metrics = self._evaluate_model(d2_transformer, data_info['data'], "Untrained Transformer")
+        else:
+            transformer_metrics = None
         
         return {
             'mlp_model': d2_mlp,
@@ -182,31 +203,38 @@ class D2DebugSuite:
         """Train models with detailed progress tracking."""
         print(f"   Training for {num_epochs} epochs with progress bars...")
         
-        # Get models from untrained results (we'll retrain them)
-        d2_mlp = create_d2_model(
-            dim=1, 
-            seq_len=data_info['seq_len'], 
-            generator_type='feedforward',
-            hidden_size=64, 
-            num_layers=3, 
-            population_size=8,
-            device=str(self.device),
-            test_mode=False
-        )
+        # Create fresh models for training (don't reuse untrained ones)
+        try:
+            d2_mlp = create_d2_model(
+                dim=1, 
+                seq_len=data_info['seq_len'], 
+                generator_type='feedforward',
+                hidden_size=64, 
+                num_layers=3, 
+                population_size=8,
+                device=str(self.device),
+                test_mode=False
+            )
+            d2_mlp = d2_mlp.to(self.device)
+        except Exception as e:
+            print(f"   ❌ D2-MLP creation failed: {e}")
+            d2_mlp = None
         
-        d2_transformer = create_d2_transformer_model(
-            dim=1,
-            seq_len=data_info['seq_len'],
-            hidden_size=64,
-            num_layers=3,
-            num_heads=8,
-            population_size=8,
-            device=str(self.device)
-        )
-        
-        # Move models to device
-        d2_mlp = d2_mlp.to(self.device)
-        d2_transformer = d2_transformer.to(self.device)
+        try:
+            d2_transformer = create_d2_transformer_model(
+                dim=1,
+                seq_len=data_info['seq_len'],
+                hidden_size=64,
+                num_layers=3,
+                num_heads=8,
+                population_size=8,
+                device=str(self.device)
+            )
+            d2_transformer = d2_transformer.to(self.device)
+        except Exception as e:
+            print(f"   ❌ D2-Transformer creation failed: {e}")
+            print(f"   💡 Continuing with MLP-only training")
+            d2_transformer = None
         
         training_results = {
             'mlp_trained': False,
@@ -218,32 +246,38 @@ class D2DebugSuite:
         }
         
         # Try training MLP
-        print("\\n   🔵 Training D2-MLP...")
-        try:
-            with tqdm(total=num_epochs, desc="MLP Training", unit="epoch") as pbar:
-                # Custom training loop with progress updates
-                mlp_history = self._custom_fit_with_progress(
-                    d2_mlp, data_info['data'], num_epochs, pbar, "MLP"
-                )
-            training_results['mlp_trained'] = True
-            training_results['mlp_history'] = mlp_history
-            print("      ✅ MLP training completed")
-        except Exception as e:
-            print(f"      ❌ MLP training failed: {e}")
+        if d2_mlp is not None:
+            print("\\n   🔵 Training D2-MLP...")
+            try:
+                with tqdm(total=num_epochs, desc="MLP Training", unit="epoch") as pbar:
+                    # Custom training loop with progress updates
+                    mlp_history = self._custom_fit_with_progress(
+                        d2_mlp, data_info['data'], num_epochs, pbar, "MLP"
+                    )
+                training_results['mlp_trained'] = True
+                training_results['mlp_history'] = mlp_history
+                print("      ✅ MLP training completed")
+            except Exception as e:
+                print(f"      ❌ MLP training failed: {e}")
+        else:
+            print("\\n   🔵 D2-MLP training skipped (model creation failed)")
         
         # Try training Transformer
-        print("\\n   🟢 Training D2-Transformer...")
-        try:
-            with tqdm(total=num_epochs, desc="Transformer Training", unit="epoch") as pbar:
-                # Custom training loop with progress updates
-                transformer_history = self._custom_fit_with_progress(
-                    d2_transformer, data_info['data'], num_epochs, pbar, "Transformer"
-                )
-            training_results['transformer_trained'] = True
-            training_results['transformer_history'] = transformer_history
-            print("      ✅ Transformer training completed")
-        except Exception as e:
-            print(f"      ❌ Transformer training failed: {e}")
+        if d2_transformer is not None:
+            print("\\n   🟢 Training D2-Transformer...")
+            try:
+                with tqdm(total=num_epochs, desc="Transformer Training", unit="epoch") as pbar:
+                    # Custom training loop with progress updates
+                    transformer_history = self._custom_fit_with_progress(
+                        d2_transformer, data_info['data'], num_epochs, pbar, "Transformer"
+                    )
+                training_results['transformer_trained'] = True
+                training_results['transformer_history'] = transformer_history
+                print("      ✅ Transformer training completed")
+            except Exception as e:
+                print(f"      ❌ Transformer training failed: {e}")
+        else:
+            print("\\n   🟢 D2-Transformer training skipped (model not available)")
         
         return training_results
     
@@ -302,7 +336,7 @@ class D2DebugSuite:
         else:
             results['mlp_metrics'] = None
             
-        if training_results['transformer_trained']:
+        if training_results['transformer_trained'] and training_results['transformer_model'] is not None:
             results['transformer_metrics'] = self._evaluate_model(
                 training_results['transformer_model'], data_info['data'], "Trained Transformer"
             )
