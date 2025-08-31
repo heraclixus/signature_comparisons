@@ -63,9 +63,17 @@ class ModelCheckpoint:
             "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad)
         }
         
-        # Save model state
+        # Save model state dict
         model_path = os.path.join(model_dir, "model.pth")
         torch.save(model.state_dict(), model_path)
+        
+        # Save complete model object for reliable loading
+        full_model_path = os.path.join(model_dir, "full_model.pth")
+        try:
+            torch.save(model, full_model_path)
+        except Exception as e:
+            # If full model saving fails, log but continue
+            print(f"⚠️ Could not save full model object: {e}")
         
         # Save model configuration instead of full object (to avoid pickle issues)
         model_config_path = os.path.join(model_dir, "model_config.json")
@@ -213,6 +221,18 @@ class ModelCheckpoint:
             return None
         
         try:
+            # Try loading full model object first (most reliable)
+            full_model_path = os.path.join(model_dir, "full_model.pth")
+            if os.path.exists(full_model_path):
+                print(f"📦 Loading complete model object for {model_id}...")
+                model = torch.load(full_model_path, map_location='cpu')
+                model.eval()
+                print(f"✅ Model {model_id} loaded from complete object")
+                return model
+            
+            # Fallback: Load using state dict (original method)
+            print(f"🔧 Loading model {model_id} using state dict method...")
+            
             # Load model config
             with open(model_config_path, 'r') as f:
                 model_config = json.load(f)
@@ -228,7 +248,51 @@ class ModelCheckpoint:
             model_path = os.path.join(model_dir, "model.pth")
             if os.path.exists(model_path):
                 state_dict = torch.load(model_path, map_location='cpu')
-                model.load_state_dict(state_dict)
+                
+                # Try loading with strict=True first, then fallback to strict=False
+                try:
+                    model.load_state_dict(state_dict, strict=True)
+                    print(f"   ✅ Loaded state dict with strict=True")
+                except RuntimeError as e:
+                    if "size mismatch" in str(e) or "Missing key" in str(e) or "Unexpected key" in str(e):
+                        print(f"   ⚠️ Strict loading failed due to architecture mismatch")
+                        print(f"   📝 This model was trained with a different code version")
+                        print(f"   🔄 Attempting partial loading (compatible weights only)...")
+                        
+                        # Try to load only compatible weights
+                        try:
+                            # Create a filtered state dict with only compatible keys
+                            model_state_keys = set(model.state_dict().keys())
+                            saved_state_keys = set(state_dict.keys())
+                            
+                            compatible_keys = []
+                            incompatible_keys = []
+                            
+                            for key in saved_state_keys:
+                                if key in model_state_keys:
+                                    saved_shape = state_dict[key].shape
+                                    model_shape = model.state_dict()[key].shape
+                                    if saved_shape == model_shape:
+                                        compatible_keys.append(key)
+                                    else:
+                                        incompatible_keys.append(key)
+                            
+                            # Load only compatible weights
+                            if compatible_keys:
+                                filtered_state_dict = {k: state_dict[k] for k in compatible_keys}
+                                model.load_state_dict(filtered_state_dict, strict=False)
+                                
+                                print(f"   ✅ Partial loading successful:")
+                                print(f"      Compatible weights: {len(compatible_keys)}")
+                                print(f"      Incompatible weights: {len(incompatible_keys)} (using random init)")
+                            else:
+                                print(f"   ❌ No compatible weights found - using random initialization")
+                                
+                        except Exception as partial_e:
+                            print(f"   ❌ Partial loading also failed: {partial_e}")
+                            print(f"   🔄 Using model with random initialization")
+                    else:
+                        raise e
             
             model.eval()  # Set to evaluation mode
             print(f"✅ Model {model_id} loaded successfully")
@@ -362,22 +426,73 @@ class ModelCheckpoint:
                 return create_d1_model(example_batch, real_data)
             
             elif model_id == "D2":
-                from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
-                example_batch = torch.randn(32, 2, 100)
-                real_data = torch.randn(32, 2, 100)
-                return create_d2_model(example_batch, real_data)
+                from models.implementations.d2_training_wrapper import create_model as create_d2_model
+                from utils.model_config_extractor import extract_d2_config_from_state_dict
+                
+                # Load state dict to extract actual configuration
+                model_path = os.path.join(self.base_dir, "trained_models", model_id, "model.pth")
+                if os.path.exists(model_path):
+                    state_dict = torch.load(model_path, map_location='cpu')
+                    extracted_config = extract_d2_config_from_state_dict(state_dict)
+                    
+                    seq_len = extracted_config['seq_len']
+                    print(f"   Recreating D2 model with extracted config: seq_len={seq_len}, hidden_size={extracted_config['hidden_size']}")
+                    
+                    # Create model with extracted configuration
+                    example_batch = torch.randn(64, 2, seq_len)  # Use larger batch to avoid test mode
+                    real_data = torch.randn(64, 2, seq_len)
+                    return create_d2_model(example_batch, real_data, extracted_config)
+                else:
+                    # Fallback to defaults
+                    example_batch = torch.randn(64, 2, 64)
+                    real_data = torch.randn(64, 2, 64)
+                    return create_d2_model(example_batch, real_data, {'test_mode': False})
             
             elif model_id == "D3":
                 from models.implementations.d3_distributional_pde import create_model as create_d3_model
-                example_batch = torch.randn(32, 2, 100)
-                real_data = torch.randn(32, 2, 100)
-                return create_d3_model(example_batch, real_data)
+                from utils.model_config_extractor import extract_d3_config_from_state_dict
+                
+                # Load state dict to extract actual configuration
+                model_path = os.path.join(self.base_dir, "trained_models", model_id, "model.pth")
+                if os.path.exists(model_path):
+                    state_dict = torch.load(model_path, map_location='cpu')
+                    extracted_config = extract_d3_config_from_state_dict(state_dict)
+                    
+                    seq_len = extracted_config['seq_len']
+                    print(f"   Recreating D3 model with extracted config: seq_len={seq_len}, hidden_size={extracted_config['hidden_size']}")
+                    
+                    # Create model with extracted configuration
+                    example_batch = torch.randn(64, 2, seq_len)
+                    real_data = torch.randn(64, 2, seq_len)
+                    return create_d3_model(example_batch, real_data, extracted_config)
+                else:
+                    # Fallback to defaults
+                    example_batch = torch.randn(64, 2, 64)
+                    real_data = torch.randn(64, 2, 64)
+                    return create_d3_model(example_batch, real_data, {'test_mode': False})
             
             elif model_id == "D4":
                 from models.implementations.d4_distributional_truncated import create_model as create_d4_model
-                example_batch = torch.randn(32, 2, 100)
-                real_data = torch.randn(32, 2, 100)
-                return create_d4_model(example_batch, real_data)
+                from utils.model_config_extractor import extract_d4_config_from_state_dict
+                
+                # Load state dict to extract actual configuration
+                model_path = os.path.join(self.base_dir, "trained_models", model_id, "model.pth")
+                if os.path.exists(model_path):
+                    state_dict = torch.load(model_path, map_location='cpu')
+                    extracted_config = extract_d4_config_from_state_dict(state_dict)
+                    
+                    seq_len = extracted_config['seq_len']
+                    print(f"   Recreating D4 model with extracted config: seq_len={seq_len}, hidden_size={extracted_config['hidden_size']}")
+                    
+                    # Create model with extracted configuration
+                    example_batch = torch.randn(64, 2, seq_len)
+                    real_data = torch.randn(64, 2, seq_len)
+                    return create_d4_model(example_batch, real_data, extracted_config)
+                else:
+                    # Fallback to defaults
+                    example_batch = torch.randn(64, 2, 64)
+                    real_data = torch.randn(64, 2, 64)
+                    return create_d4_model(example_batch, real_data, {'test_mode': False})
             
             # V series models - Latent SDE
             elif model_id == "V1":

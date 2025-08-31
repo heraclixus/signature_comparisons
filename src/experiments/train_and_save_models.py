@@ -126,7 +126,7 @@ except ImportError as e:
         print("   → Check that relative imports are used in tsdiff modules")
 
 try:
-    from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
+    from models.implementations.d2_training_wrapper import create_model as create_d2_model
     D2_AVAILABLE = True
 except ImportError as e:
     D2_AVAILABLE = False

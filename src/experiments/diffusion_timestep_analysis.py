@@ -53,7 +53,7 @@ except ImportError:
     warnings.warn("D1 model not available")
 
 try:
-    from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
+    from models.implementations.d2_training_wrapper import create_model as create_d2_model
     D2_AVAILABLE = True
 except ImportError:
     D2_AVAILABLE = False

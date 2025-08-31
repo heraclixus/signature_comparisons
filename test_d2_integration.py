@@ -50,7 +50,7 @@ def test_d2_training_interface():
     print("\nTesting D2 training interface...")
     
     try:
-        from models.d2_distributional_diffusion import create_d2_model
+        from models.d2_base_model import create_d2_model
         
         # Create model with small configuration for testing
         d2_model = create_d2_model(
@@ -92,7 +92,7 @@ def test_d2_training_loop():
     print("\nTesting D2 training loop...")
     
     try:
-        from models.d2_distributional_diffusion import create_d2_model
+        from models.d2_base_model import create_d2_model
         
         # Create model
         d2_model = create_d2_model(
@@ -182,7 +182,7 @@ def test_cuda_support():
     
     if torch.cuda.is_available():
         try:
-            from models.d2_distributional_diffusion import create_d2_model
+            from models.d2_base_model import create_d2_model
             
             # Create model on CUDA
             d2_model = create_d2_model(

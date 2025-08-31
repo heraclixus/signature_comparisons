@@ -23,8 +23,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Import D2 base components
 try:
-    from models.d2_distributional_diffusion import D2DistributionalDiffusion, create_d2_config
-    from models.implementations.d2_distributional_diffusion import D2Model
+    from models.d2_base_model import D2DistributionalDiffusion, create_d2_config
+    from models.implementations.d2_training_wrapper import D2Model
     D2_AVAILABLE = True
 except ImportError as e:
     D2_AVAILABLE = False

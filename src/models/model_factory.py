@@ -19,7 +19,7 @@ from .model_registry import get_model_registry, register_model
 
 # Import D2 model
 try:
-    from .d2_distributional_diffusion import D2DistributionalDiffusion, create_d2_config
+    from .d2_base_model import D2DistributionalDiffusion, create_d2_config
     D2_AVAILABLE = True
 except ImportError:
     D2_AVAILABLE = False

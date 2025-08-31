@@ -239,7 +239,7 @@ def simulate_training_script_imports():
     
     # D2
     try:
-        from models.implementations.d2_distributional_diffusion import create_model as create_d2_model
+        from models.implementations.d2_training_wrapper import create_model as create_d2_model
         availability_flags['D2'] = True
         print("✅ D2_AVAILABLE = True")
     except ImportError as e:

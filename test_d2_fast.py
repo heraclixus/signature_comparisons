@@ -18,7 +18,7 @@ def test_d2_fast():
     print("🚀 Testing D2 with fast configuration...")
     
     try:
-        from models.implementations.d2_distributional_diffusion import create_model
+        from models.implementations.d2_training_wrapper import create_model
         
         # Create very small synthetic data for speed
         batch_size = 8
