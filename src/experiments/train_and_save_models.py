@@ -17,7 +17,7 @@ import logging
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
-from pathlib import Path
+from pathlib import Path  
 from scipy import stats
 from typing import Dict, Any, List, Tuple
 
@@ -29,171 +29,14 @@ from dataset.multi_dataset import MultiDatasetManager
 from utils.model_checkpoint import create_checkpoint_manager
 from utils.model_trainer import ModelTrainer, LoggingModelTrainer, train_model_memory_optimized
 from utils.training_visualization import create_final_training_summary
+from utils.model_registry import check_model_availability, get_model_configs, print_model_availability_summary, get_models_to_train
 
-# Import all available models
-try:
-    from models.implementations.a1_final import create_a1_final_model
-    A1_AVAILABLE = True
-except ImportError:
-    A1_AVAILABLE = False
-
-try:
-    from models.implementations.a2_canned_scoring import create_a2_model
-    A2_AVAILABLE = True
-except ImportError:
-    A2_AVAILABLE = False
-
-try:
-    from models.implementations.a3_canned_mmd import create_a3_model
-    A3_AVAILABLE = True
-except ImportError:
-    A3_AVAILABLE = False
-
-try:
-    from models.implementations.b4_nsde_mmd import create_b4_model
-    B4_AVAILABLE = True
-except ImportError:
-    B4_AVAILABLE = False
-
-try:
-    from models.implementations.b5_nsde_scoring import create_b5_model
-    B5_AVAILABLE = True
-except ImportError:
-    B5_AVAILABLE = False
-
-try:
-    from models.implementations.a4_canned_logsig import create_a4_model
-    A4_AVAILABLE = True
-except ImportError:
-    A4_AVAILABLE = False
-
-try:
-    from models.implementations.b3_nsde_tstatistic import create_b3_model
-    B3_AVAILABLE = True
-except ImportError:
-    B3_AVAILABLE = False
-
-try:
-    from models.implementations.b1_nsde_scoring import create_b1_model
-    B1_AVAILABLE = True
-except ImportError:
-    B1_AVAILABLE = False
-
-try:
-    from models.implementations.b2_nsde_mmd_pde import create_b2_model
-    B2_AVAILABLE = True
-except ImportError:
-    B2_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c1_latent_sde_tstat import create_c1_model
-    C1_AVAILABLE = True
-except ImportError:
-    C1_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c2_latent_sde_scoring import create_c2_model
-    C2_AVAILABLE = True
-except ImportError:
-    C2_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c3_latent_sde_mmd import create_c3_model
-    C3_AVAILABLE = True
-except ImportError:
-    C3_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c4_sde_matching_tstat import create_c4_model
-    C4_AVAILABLE = True
-except ImportError:
-    C4_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c5_sde_matching_scoring import create_c5_model
-    C5_AVAILABLE = True
-except ImportError:
-    C5_AVAILABLE = False
-
-try:
-    from models.implementations.hybrid_latent_sde.c6_sde_matching_mmd import create_c6_model
-    C6_AVAILABLE = True
-except ImportError:
-    C6_AVAILABLE = False
-
-try:
-    from models.implementations.d1_diffusion import create_d1_model
-    D1_AVAILABLE = True
-except ImportError as e:
-    D1_AVAILABLE = False
-    print(f"❌ D1 model import failed: {e}")
-    # For debugging server issues - show key error details
-    if "tsdiff" in str(e):
-        print("   → This appears to be a TSDiff import issue")
-        print("   → Check that relative imports are used in tsdiff modules")
-
-try:
-    from models.implementations.d2_training_wrapper import create_model as create_d2_model
-    D2_AVAILABLE = True
-except ImportError as e:
-    D2_AVAILABLE = False
-    print(f"❌ D2 model import failed: {e}")
-    import traceback
-    traceback.print_exc()
-
-try:
-    from models.implementations.d3_distributional_pde import create_model as create_d3_model
-    D3_AVAILABLE = True
-    print(f"✅ D3 model import successful")
-except ImportError as e:
-    D3_AVAILABLE = False
-    print(f"❌ D3 model import failed: {e}")
-    import traceback
-    traceback.print_exc()
-
-try:
-    from models.implementations.d4_distributional_truncated import create_model as create_d4_model
-    D4_AVAILABLE = True
-    print(f"✅ D4 model import successful")
-except ImportError as e:
-    D4_AVAILABLE = False
-    print(f"❌ D4 model import failed: {e}")
-    import traceback
-    traceback.print_exc()
-
-try:
-    from models.latent_sde.implementations.v1_latent_sde import create_v1_model
-    V1_AVAILABLE = True
-except ImportError:
-    V1_AVAILABLE = False
-
-try:
-    from models.sdematching.implementations.v2_sde_matching import create_v2_model
-    V2_AVAILABLE = True
-except ImportError:
-    V2_AVAILABLE = False
-
-# C1-C3 (GRU) models removed - not truly generative
-# Diversity testing revealed they don't produce diverse random sample paths
+# Check model availability
+MODEL_AVAILABILITY, MODEL_CREATORS = check_model_availability()
+MODEL_CONFIGS = get_model_configs()
 
 # Print availability summary for debugging
-print(f"\n📊 Model Availability Summary:")
-print(f"   A-series: A1={A1_AVAILABLE}, A2={A2_AVAILABLE}, A3={A3_AVAILABLE}, A4={A4_AVAILABLE}")
-print(f"   B-series: B1={B1_AVAILABLE}, B2={B2_AVAILABLE}, B3={B3_AVAILABLE}, B4={B4_AVAILABLE}, B5={B5_AVAILABLE}")
-print(f"   C-series: C1={C1_AVAILABLE}, C2={C2_AVAILABLE}, C3={C3_AVAILABLE}, C4={C4_AVAILABLE}, C5={C5_AVAILABLE}, C6={C6_AVAILABLE}")
-print(f"   D-series: D1={D1_AVAILABLE}, D2={D2_AVAILABLE}, D3={D3_AVAILABLE}, D4={D4_AVAILABLE}")
-print(f"   V-series: V1={V1_AVAILABLE}, V2={V2_AVAILABLE}")
-
-available_models = []
-for model, available in [("A1", A1_AVAILABLE), ("A2", A2_AVAILABLE), ("A3", A3_AVAILABLE), ("A4", A4_AVAILABLE),
-                        ("B1", B1_AVAILABLE), ("B2", B2_AVAILABLE), ("B3", B3_AVAILABLE), ("B4", B4_AVAILABLE), ("B5", B5_AVAILABLE),
-                        ("C1", C1_AVAILABLE), ("C2", C2_AVAILABLE), ("C3", C3_AVAILABLE), ("C4", C4_AVAILABLE), ("C5", C5_AVAILABLE), ("C6", C6_AVAILABLE),
-                        ("D1", D1_AVAILABLE), ("D2", D2_AVAILABLE), ("D3", D3_AVAILABLE), ("D4", D4_AVAILABLE),
-                        ("V1", V1_AVAILABLE), ("V2", V2_AVAILABLE)]:
-    if available:
-        available_models.append(model)
-
-print(f"   📋 Total available models ({len(available_models)}): {available_models}")
+print_model_availability_summary(MODEL_AVAILABILITY)
 
 # Global variables for training
 TRAINING_DEVICE = torch.device('cpu')  # Default, will be set in main()
@@ -353,181 +196,8 @@ def train_available_models(num_epochs: int = 100, learning_rate: float = 0.001, 
     # Setup training data
     train_loader, example_batch, signals = setup_training_data(dataset_name=dataset_name)
     
-    # Track which models to train
-    models_to_train = []
-    
-    # Check A1
-    if A1_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("A1"):
-            print(f"⏭️ A1 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("A1"):
-                print(f"🔄 A1 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("A1", create_a1_final_model, "T-Statistic"))
-    
-    # Check A2
-    if A2_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("A2"):
-            print(f"⏭️ A2 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("A2"):
-                print(f"🔄 A2 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("A2", create_a2_model, "Signature Scoring"))
-    
-    # Check A3
-    if A3_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("A3"):
-            print(f"⏭️ A3 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("A3"):
-                print(f"🔄 A3 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("A3", create_a3_model, "MMD"))
-    
-    # Check B4
-    if B4_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("B4"):
-            print(f"⏭️ B4 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("B4"):
-                print(f"🔄 B4 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("B4", create_b4_model, "Neural SDE + MMD"))
-    
-    # Check B5
-    if B5_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("B5"):
-            print(f"⏭️ B5 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("B5"):
-                print(f"🔄 B5 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("B5", create_b5_model, "Neural SDE + Signature Scoring"))
-    
-    # Check A4
-    if A4_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("A4"):
-            print(f"⏭️ A4 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("A4"):
-                print(f"🔄 A4 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("A4", create_a4_model, "CannedNet + T-Statistic + Log Signatures"))
-    
-    # Check B3
-    if B3_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("B3"):
-            print(f"⏭️ B3 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("B3"):
-                print(f"🔄 B3 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("B3", create_b3_model, "Neural SDE + T-Statistic"))
-    
-    # Check B1
-    if B1_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("B1"):
-            print(f"⏭️ B1 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("B1"):
-                print(f"🔄 B1 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("B1", create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved"))
-    
-    # Check B2
-    if B2_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("B2"):
-            print(f"⏭️ B2 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("B2"):
-                print(f"🔄 B2 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved"))
-    
-    # Check C1 (Hybrid Latent SDE + T-Statistic)
-    if C1_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C1"):
-            print(f"⏭️ C1 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C1"):
-                print(f"🔄 C1 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C1", create_c1_model, "Hybrid Latent SDE + T-Statistic"))
-    
-    # Check C2 (Hybrid Latent SDE + Signature Scoring)
-    if C2_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C2"):
-            print(f"⏭️ C2 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C2"):
-                print(f"🔄 C2 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C2", create_c2_model, "Hybrid Latent SDE + Signature Scoring"))
-    
-    # Check C3 (Hybrid Latent SDE + Signature MMD)
-    if C3_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C3"):
-            print(f"⏭️ C3 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C3"):
-                print(f"🔄 C3 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C3", create_c3_model, "Hybrid Latent SDE + Signature MMD"))
-    
-    # Check C4 (Hybrid SDE Matching + T-Statistic)
-    if C4_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C4"):
-            print(f"⏭️ C4 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C4"):
-                print(f"🔄 C4 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C4", create_c4_model, "Hybrid SDE Matching + T-Statistic"))
-    
-    # Check C5 (Hybrid SDE Matching + Signature Scoring)
-    if C5_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C5"):
-            print(f"⏭️ C5 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C5"):
-                print(f"🔄 C5 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring"))
-    
-    # Check C6 (Hybrid SDE Matching + Signature MMD)
-    if C6_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("C6"):
-            print(f"⏭️ C6 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("C6"):
-                print(f"🔄 C6 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD"))
-    
-    # Check D1 (Time Series Diffusion Model)
-    if D1_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("D1"):
-            print(f"⏭️ D1 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("D1"):
-                print(f"🔄 D1 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("D1", create_d1_model, "Time Series Diffusion Model"))
-    
-    # Check D2 (Distributional Diffusion Model)
-    if D2_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("D2"):
-            print(f"⏭️ D2 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("D2"):
-                print(f"🔄 D2 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring"))
-    
-    # Check D3 (Distributional Diffusion + PDE-Solved Signatures)
-    if D3_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("D3"):
-            print(f"⏭️ D3 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("D3"):
-                print(f"🔄 D3 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("D3", create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels"))
-    
-    # Check D4 (Distributional Diffusion + Truncated Signatures)
-    if D4_AVAILABLE:
-        if not retrain_all and checkpoint_manager.model_exists("D4"):
-            print(f"⏭️ D4 already trained, skipping...")
-        else:
-            if retrain_all and checkpoint_manager.model_exists("D4"):
-                print(f"🔄 D4 exists but retraining due to --retrain-all flag")
-            models_to_train.append(("D4", create_d4_model, "Distributional Diffusion + Truncated Signature Kernels"))
-    
-    # C1-C3 models removed - not truly generative
+    # Get models to train using registry
+    models_to_train = get_models_to_train(MODEL_AVAILABILITY, MODEL_CREATORS, checkpoint_manager, retrain_all)
     
     if not models_to_train:
         print(f"\n✅ All available models already trained!")
@@ -665,7 +335,8 @@ def force_retrain_model(model_id: str, num_epochs: int = 100):
     train_available_models(num_epochs)
 
 
-def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: bool = False, retrain_all: bool = False):
+def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: bool = False, retrain_all: bool = False,
+                      enable_trajectory_viz: bool = True, viz_every: int = 10):
     """Train all models on all datasets."""
     print("🚀 Multi-Dataset Training Pipeline")
     if memory_optimized:
@@ -702,11 +373,11 @@ def train_all_datasets(epochs: int = 100, lr: float = 0.001, memory_optimized: b
         if dataset_name == 'ou_process':
             # Use existing OU training function
             train_available_models(epochs, lr, dataset_name='ou_process', memory_optimized=memory_optimized, retrain_all=retrain_all,
-                                 enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
+                                 enable_trajectory_viz=enable_trajectory_viz, viz_every=viz_every)
         else:
             # Train on new dataset
             train_available_models_on_dataset(dataset_name, dataset_data, epochs, lr, memory_optimized=memory_optimized, retrain_all=retrain_all,
-                                            enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
+                                            enable_trajectory_viz=enable_trajectory_viz, viz_every=viz_every)
 
 
 def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: int = 100, lr: float = 0.001, 
@@ -745,39 +416,8 @@ def train_available_models_on_dataset(dataset_name: str, dataset_data, epochs: i
     # Check which models need training
     models_to_train = []
     
-    # Check all available models
-    model_configs = [
-        ("A1", create_a1_final_model, "CannedNet + T-Statistic", A1_AVAILABLE),
-        ("A2", create_a2_model, "CannedNet + Signature Scoring", A2_AVAILABLE),
-        ("A3", create_a3_model, "CannedNet + MMD", A3_AVAILABLE),
-        ("A4", create_a4_model, "CannedNet + T-Statistic + Log Signatures", A4_AVAILABLE),
-        ("B1", create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved", B1_AVAILABLE),
-        ("B2", create_b2_model, "Neural SDE + MMD + PDE-Solved", B2_AVAILABLE),
-        ("B3", create_b3_model, "Neural SDE + T-Statistic", B3_AVAILABLE),
-        ("B4", create_b4_model, "Neural SDE + MMD", B4_AVAILABLE),
-        ("B5", create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE),
-        ("C1", create_c1_model, "Hybrid Latent SDE + T-Statistic", C1_AVAILABLE),
-        ("C2", create_c2_model, "Hybrid Latent SDE + Signature Scoring", C2_AVAILABLE),
-        ("C3", create_c3_model, "Hybrid Latent SDE + Signature MMD", C3_AVAILABLE),
-        ("C4", create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
-        ("C5", create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
-        ("C6", create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
-        ("D1", create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
-        ("D2", create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
-        ("D3", create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels", D3_AVAILABLE),
-        ("D4", create_d4_model, "Distributional Diffusion + Truncated Signature Kernels", D4_AVAILABLE),
-        ("V1", create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
-        ("V2", create_v2_model, "SDE Matching", V2_AVAILABLE)
-    ]
-    
-    for model_id, create_fn, description, available in model_configs:
-        if available:
-            if not retrain_all and checkpoint_manager.model_exists(model_id):
-                print(f"⏭️ {model_id} already trained on {dataset_name}, skipping...")
-            else:
-                if retrain_all and checkpoint_manager.model_exists(model_id):
-                    print(f"🔄 {model_id} exists on {dataset_name} but retraining due to --retrain-all flag")
-                models_to_train.append((model_id, create_fn, description))
+    # Get models to train using registry
+    models_to_train = get_models_to_train(MODEL_AVAILABILITY, MODEL_CREATORS, checkpoint_manager, retrain_all)
     
     if not models_to_train:
         print(f"\n✅ All available models already trained on {dataset_name}!")
@@ -917,7 +557,7 @@ def main():
     import os
     
     # Quick environment check for debugging server issues
-    if not D1_AVAILABLE:
+    if not MODEL_AVAILABILITY.get('D1', False):
         print("⚠️ D1 model not available - checking environment:")
         print(f"   Working directory: {os.getcwd()}")
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1033,7 +673,8 @@ def main():
                                                   enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
         else:
             # Retrain all models on all datasets
-            train_all_datasets(args.epochs, args.lr, args.memory_opt, retrain_all=True)
+            train_all_datasets(args.epochs, args.lr, args.memory_opt, retrain_all=True,
+                              enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
     elif args.dataset:
         # Train on specific dataset
         if args.dataset == 'ou_process':
@@ -1046,7 +687,8 @@ def main():
                                             enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
     else:
         # Train on all datasets (default behavior)
-        train_all_datasets(args.epochs, args.lr, args.memory_opt)
+        train_all_datasets(args.epochs, args.lr, args.memory_opt,
+                          enable_trajectory_viz=not args.no_viz, viz_every=args.viz_every)
 
 
 def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: int = 100, 
@@ -1066,86 +708,18 @@ def train_single_model(model_id: str, dataset_name: str = 'ou_process', epochs: 
         logger.info("   🔄 Force retrain mode")
     logger.info("=" * 50)
     
-    # Get model configuration
-    model_configs = {
-        "A1": (create_a1_final_model, "CannedNet + T-Statistic", A1_AVAILABLE),
-        "A2": (create_a2_model, "CannedNet + Signature Scoring", A2_AVAILABLE),
-        "A3": (create_a3_model, "CannedNet + MMD", A3_AVAILABLE),
-        "A4": (create_a4_model, "CannedNet + T-Statistic + Log Signatures", A4_AVAILABLE),
-        "B1": (create_b1_model, "Neural SDE + Signature Scoring + PDE-Solved", B1_AVAILABLE),
-        "B2": (create_b2_model, "Neural SDE + MMD + PDE-Solved", B2_AVAILABLE),
-        "B3": (create_b3_model, "Neural SDE + T-Statistic", B3_AVAILABLE),
-        "B4": (create_b4_model, "Neural SDE + MMD", B4_AVAILABLE),
-        "B5": (create_b5_model, "Neural SDE + Signature Scoring", B5_AVAILABLE),
-        "C1": (create_c1_model, "Hybrid Latent SDE + T-Statistic", C1_AVAILABLE),
-        "C2": (create_c2_model, "Hybrid Latent SDE + Signature Scoring", C2_AVAILABLE),
-        "C3": (create_c3_model, "Hybrid Latent SDE + Signature MMD", C3_AVAILABLE),
-        "C4": (create_c4_model, "Hybrid SDE Matching + T-Statistic", C4_AVAILABLE),
-        "C5": (create_c5_model, "Hybrid SDE Matching + Signature Scoring", C5_AVAILABLE),
-        "C6": (create_c6_model, "Hybrid SDE Matching + Signature MMD", C6_AVAILABLE),
-        "D1": (create_d1_model, "Time Series Diffusion Model", D1_AVAILABLE),
-        "D2": (create_d2_model, "Distributional Diffusion + Signature Kernel Scoring", D2_AVAILABLE),
-        "D3": (create_d3_model, "Distributional Diffusion + PDE-Solved Signature Kernels", D3_AVAILABLE),
-        "D4": (create_d4_model, "Distributional Diffusion + Truncated Signature Kernels", D4_AVAILABLE),
-        "V1": (create_v1_model, "Latent SDE (TorchSDE)", V1_AVAILABLE),
-        "V2": (create_v2_model, "SDE Matching", V2_AVAILABLE)
-    }
-    
-    if model_id not in model_configs:
+    # Get model configuration from registry
+    if model_id not in MODEL_AVAILABILITY:
         logger.error(f"❌ Unknown model ID: {model_id}")
-        logger.error(f"Available models: {list(model_configs.keys())}")
-        
-        # Enhanced debugging for missing models
-        logger.error(f"🔍 Debug info for missing model {model_id}:")
-        logger.error(f"   D3_AVAILABLE = {D3_AVAILABLE}")
-        logger.error(f"   D4_AVAILABLE = {D4_AVAILABLE}")
-        logger.error(f"   Model configs keys: {sorted(model_configs.keys())}")
-        
-        # Check if the model should be available
-        expected_models = ["A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "B5", 
-                          "C1", "C2", "C3", "C4", "C5", "C6", "D1", "D2", "D3", "D4", "V1", "V2"]
-        missing_models = [m for m in expected_models if m not in model_configs]
-        if missing_models:
-            logger.error(f"   Missing from model_configs: {missing_models}")
-        
-        # Try to re-import the specific model for debugging
-        if model_id == "D3":
-            logger.info("   Attempting to re-import D3 model for debugging...")
-            try:
-                from models.implementations.d3_distributional_pde import create_model as debug_d3
-                logger.info("   ✅ D3 re-import successful!")
-                logger.info(f"   Function location: {debug_d3.__module__}")
-            except Exception as debug_e:
-                logger.error(f"   ❌ D3 re-import failed: {debug_e}")
-                logger.error("   Exception details:", exc_info=True)
-        
-        if model_id == "D4":
-            logger.info("   Attempting to re-import D4 model for debugging...")
-            try:
-                from models.implementations.d4_distributional_truncated import create_model as debug_d4
-                logger.info("   ✅ D4 re-import successful!")
-                logger.info(f"   Function location: {debug_d4.__module__}")
-            except Exception as debug_e:
-                logger.error(f"   ❌ D4 re-import failed: {debug_e}")
-                logger.error("   Exception details:", exc_info=True)
-        
+        logger.error(f"Available models: {list(MODEL_AVAILABILITY.keys())}")
         return False
     
-    create_fn, description, available = model_configs[model_id]
-    
-    if not available:
+    if not MODEL_AVAILABILITY[model_id]:
         logger.error(f"❌ Model {model_id} is not available (import failed)")
-        logger.error(f"Debug info: D1_AVAILABLE = {D1_AVAILABLE}")
-        if model_id == "D1":
-            logger.info("Attempting to re-import D1 model for debugging...")
-            try:
-                from models.implementations.d1_diffusion import create_d1_model as debug_d1
-                logger.info("✅ D1 re-import successful!")
-                logger.info(f"Function location: {debug_d1.__module__}")
-            except Exception as debug_e:
-                logger.error(f"❌ D1 re-import failed: {debug_e}")
-                logger.error("Exception details:", exc_info=True)
         return False
+    
+    create_fn = MODEL_CREATORS[model_id]
+    description = MODEL_CONFIGS[model_id]
     
     logger.info(f"📋 Model: {model_id} ({description})")
     
